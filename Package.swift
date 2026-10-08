@@ -5,6 +5,7 @@ let package = Package(
     name: "FocusGuard",
     platforms: [.macOS(.v14)],
     products: [
+        .executable(name: "FocusGuard", targets: ["FocusGuard"]),
         .executable(name: "focusguard-helper", targets: ["FocusGuardHelper"]),
         .library(name: "FocusGuardCore", targets: ["FocusGuardCore"]),
     ],
@@ -16,6 +17,12 @@ let package = Package(
         // Tiny privileged CLI, the only component allowed to write /etc/hosts.
         .executableTarget(
             name: "FocusGuardHelper",
+            dependencies: ["FocusGuardCore"]
+        ),
+
+        // The app: dashboard window, menu bar item, URL scheme handling (AppKit + SwiftUI).
+        .executableTarget(
+            name: "FocusGuard",
             dependencies: ["FocusGuardCore"]
         ),
 
