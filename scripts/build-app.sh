@@ -33,10 +33,14 @@ if [[ "${1:-}" == "--install" ]]; then
   mkdir -p "$HOME/Applications"
   rm -rf "$HOME/Applications/FocusGuard.app"
   cp -R "$APP" "$HOME/Applications/"
-  # Make sure Launch Services knows about the focusguard:// URL scheme.
+  # Register the new build with Launch Services (login item, Finder, Spotlight).
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f "$HOME/Applications/FocusGuard.app"
   echo "✓ Installed to ~/Applications/FocusGuard.app"
 else
   echo "✓ Built $APP"
 fi
+
+echo
+echo "Note: the app is ad-hoc signed, so macOS treats every build as a new app."
+echo "After rebuilding, re-enable FocusGuard under Privacy & Security → Full Disk Access."
