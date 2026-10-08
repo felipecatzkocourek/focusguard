@@ -97,6 +97,7 @@ enough; full Xcode is not required).
 ```bash
 git clone https://github.com/felipecatzkocourek/focusguard.git
 cd focusguard
+./scripts/create-signing-identity.sh   # once; keeps permissions across rebuilds
 ./scripts/build-app.sh --install
 open ~/Applications/FocusGuard.app
 ```
@@ -163,8 +164,10 @@ The worst a compromised user account can do with the helper is block or unblock 
 - **DNS-over-HTTPS** set to a custom provider in a browser can bypass `/etc/hosts`.
 - **The Focus database format is undocumented.** It works on current macOS, but a future
   update could change it. FocusGuard detects that and keeps the last known state.
-- **Ad-hoc signing:** every rebuild looks like a new app to macOS, so Full Disk Access has
-  to be re-enabled after building a new version.
+- **Signing:** without a signing identity, builds are ad-hoc signed and every rebuild looks
+  like a new app to macOS, so Full Disk Access has to be re-enabled. Run
+  `scripts/create-signing-identity.sh` once to sign all builds with a stable local
+  certificate instead.
 - **FocusGuard has to be running** to start or end a session (launch at login covers this).
   Sites that are already blocked stay blocked if it quits.
 - **Scheduled Focus** (time- or location-based) might not appear in the database the same
@@ -187,8 +190,7 @@ Tracked in [milestones](https://github.com/felipecatzkocourek/focusguard/milesto
 
 - **v0.1.0:** Focus-triggered blocking, dashboard, friction-gated temporary unblocks
 - **v0.2.0:** Pomodoro timer on the dashboard ([#6](https://github.com/felipecatzkocourek/focusguard/issues/6))
-- **Backlog:** a custom "you're in Work mode" page, an app icon, a stable signing
-  identity so permissions survive rebuilds
+- **Backlog:** a custom "you're in Work mode" page, an app icon
 
 ## Tech stack
 

@@ -31,5 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blocking works with DNS over HTTPS on. The helper reports an API level, and the app asks
   to update an outdated helper.
 
+- `scripts/create-signing-identity.sh`: a stable local code-signing identity, so
+  permissions survive rebuilds; `build-app.sh` uses it when present.
+- Diagnostics in the unified log for sessions, hosts and Firefox session parsing.
+
 ### Fixed
 - Firefox ignoring block changes until restarted (#16).

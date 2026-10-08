@@ -56,6 +56,28 @@ public enum FirefoxSession {
         return urls
     }
 
+    /// A short description of the session's shape (windows, tabs and the host shown in
+    /// each), used in diagnostics when tab detection doesn't find what's expected.
+    public static func summary(sessionJSON data: Data) -> String {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "not JSON" }
+        func describe(_ windows: [[String: Any]]) -> String {
+            windows.map { window in
+                let tabs = (window["tabs"] as? [[String: Any]]) ?? []
+                let hosts = tabs.map { tab -> String in
+                    guard let entries = tab["entries"] as? [[String: Any]], !entries.isEmpty else {
+                        return "<no entries; keys: \(tab.keys.sorted().joined(separator: ","))>"
+                    }
+                    let index = min(max(((tab["index"] as? Int) ?? entries.count) - 1, 0), entries.count - 1)
+                    return (entries[index]["url"] as? String).flatMap { URL(string: $0)?.host() } ?? "<no url>"
+                }
+                return "[\(window["isPrivate"] as? Bool == true ? "private " : "")\(hosts.joined(separator: " "))]"
+            }.joined(separator: " ")
+        }
+        let windows = (root["windows"] as? [[String: Any]]) ?? []
+        let closed = (root["_closedWindows"] as? [[String: Any]]) ?? []
+        return "keys: \(root.keys.sorted().joined(separator: ",")); windows: \(describe(windows)); closed windows: \(closed.count)"
+    }
+
     /// Hostnames from `blocked` that are open in at least one tab.
     public static func openBlockedHostnames(in urls: [URL], blocked: Set<String>) -> Set<String> {
         Set(urls.compactMap { $0.host()?.lowercased() }.filter(blocked.contains))

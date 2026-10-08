@@ -93,6 +93,9 @@ enum BrowserTabs {
             let urls = try FirefoxSession.openTabURLs(sessionJSON: json)
             let open = FirefoxSession.openBlockedHostnames(in: urls, blocked: hostnames)
             Log.browsers.notice("Firefox session \(file.path(), privacy: .public): \(data.count) bytes, \(urls.count) tabs, blocked open: \(open.sorted(), privacy: .public)")
+            if open.isEmpty {
+                Log.browsers.notice("Firefox session shape: \(FirefoxSession.summary(sessionJSON: json), privacy: .public)")
+            }
             return open
         } catch {
             Log.browsers.error("Reading Firefox session \(file.path(), privacy: .public) failed: \(String(describing: error), privacy: .public)")
