@@ -7,13 +7,13 @@ struct BlockPlannerTests {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let config = Configuration(blockedDomains: ["instagram.com", "youtube.com"])
 
-    @Test func blocksNothingWhenWorkIsOff() {
-        let state = BlockState(isWorkActive: false)
+    @Test func blocksNothingOutsideASession() {
+        let state = BlockState(isBlocking: false)
         #expect(BlockPlanner.hostnamesToBlock(configuration: config, state: state, at: now).isEmpty)
     }
 
-    @Test func blocksAllVariantsWhenWorkIsOn() {
-        let state = BlockState(isWorkActive: true)
+    @Test func blocksAllVariantsDuringASession() {
+        let state = BlockState(isBlocking: true)
         let hosts = BlockPlanner.hostnamesToBlock(configuration: config, state: state, at: now)
         #expect(hosts == [
             "instagram.com", "m.instagram.com", "m.youtube.com",
@@ -23,7 +23,7 @@ struct BlockPlannerTests {
 
     @Test func activeAllowanceUnblocksOnlyThatDomain() {
         let allowance = Allowance(domain: "youtube.com", reason: "tutorial", start: now, minutes: 15)
-        let state = BlockState(isWorkActive: true, allowances: [allowance])
+        let state = BlockState(isBlocking: true, allowances: [allowance])
 
         let hosts = BlockPlanner.hostnamesToBlock(configuration: config, state: state, at: now.addingTimeInterval(60))
         #expect(!hosts.contains("youtube.com"))
@@ -32,7 +32,7 @@ struct BlockPlannerTests {
 
     @Test func expiredAllowanceBlocksAgain() {
         let allowance = Allowance(domain: "youtube.com", reason: "tutorial", start: now, minutes: 15)
-        let state = BlockState(isWorkActive: true, allowances: [allowance])
+        let state = BlockState(isBlocking: true, allowances: [allowance])
 
         let later = now.addingTimeInterval(15 * 60)
         #expect(BlockPlanner.hostnamesToBlock(configuration: config, state: state, at: later).contains("youtube.com"))
@@ -41,16 +41,16 @@ struct BlockPlannerTests {
     @Test func nextChangeIsEarliestExpiry() {
         let a = Allowance(domain: "youtube.com", reason: "", start: now, minutes: 30)
         let b = Allowance(domain: "instagram.com", reason: "", start: now, minutes: 5)
-        let state = BlockState(isWorkActive: true, allowances: [a, b])
+        let state = BlockState(isBlocking: true, allowances: [a, b])
 
         #expect(BlockPlanner.nextChange(state: state, at: now) == b.expires)
-        #expect(BlockPlanner.nextChange(state: BlockState(isWorkActive: false, allowances: [a]), at: now) == nil)
+        #expect(BlockPlanner.nextChange(state: BlockState(isBlocking: false, allowances: [a]), at: now) == nil)
     }
 
     @Test func pruneRemovesOnlyExpired() {
         let short = Allowance(domain: "a.com", reason: "", start: now, minutes: 5)
         let long = Allowance(domain: "b.com", reason: "", start: now, minutes: 30)
-        var state = BlockState(isWorkActive: true, allowances: [short, long])
+        var state = BlockState(isBlocking: true, allowances: [short, long])
 
         let expired = state.pruneExpiredAllowances(at: now.addingTimeInterval(10 * 60))
         #expect(expired == [short])

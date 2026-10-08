@@ -3,8 +3,8 @@ import Foundation
 /// Something worth showing in the dashboard's "Today" list.
 public struct ActivityEvent: Codable, Equatable, Sendable, Identifiable {
     public enum Kind: Codable, Equatable, Sendable {
-        case workStarted
-        case workEnded
+        case sessionStarted(focus: String)
+        case sessionEnded
         case allowanceGranted(domain: String, reason: String, minutes: Int)
         case allowanceExpired(domain: String)
     }
@@ -39,9 +39,9 @@ public struct ActivityLog: Codable, Equatable, Sendable {
         events.filter { calendar.isDate($0.date, inSameDayAs: day) }
     }
 
-    /// Total time Work was active during the calendar day containing `now`, counting an
+    /// Total time blocking was active during the calendar day containing `now`, counting an
     /// ongoing session up to `now`. Sessions that cross midnight are clipped to the day.
-    public func workDuration(onDayOf now: Date, calendar: Calendar = .current) -> TimeInterval {
+    public func blockingDuration(onDayOf now: Date, calendar: Calendar = .current) -> TimeInterval {
         let dayStart = calendar.startOfDay(for: now)
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
 
@@ -58,9 +58,9 @@ public struct ActivityLog: Codable, Equatable, Sendable {
 
         for event in events where event.date <= now {
             switch event.kind {
-            case .workStarted where sessionStart == nil:
+            case .sessionStarted where sessionStart == nil:
                 sessionStart = event.date
-            case .workEnded:
+            case .sessionEnded:
                 close(at: event.date)
             default:
                 break
