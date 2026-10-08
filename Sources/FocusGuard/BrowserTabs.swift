@@ -27,6 +27,7 @@ enum BrowserTabs {
     static func closeTabs(showing hostnames: Set<String>) async {
         guard !hostnames.isEmpty else { return }
         let running = scriptable.filter { isRunning($0.bundleIdentifier) }
+        Log.browsers.notice("Closing tabs for \(hostnames.sorted(), privacy: .public) in \(running.map(\.name), privacy: .public)")
         for browser in running {
             let script = closeTabsScript(app: browser.name)
             await Task.detached {
@@ -78,13 +79,25 @@ enum BrowserTabs {
     /// Blocked hostnames currently open in Firefox, from its most recently saved session.
     /// Firefox saves every ~15 s, so a tab opened just now may not be listed yet.
     static func firefoxTabs(showing hostnames: Set<String>) -> Set<String> {
-        guard isFirefoxRunning,
-              let file = newestFirefoxProfileFile("sessionstore-backups/recovery.jsonlz4"),
-              let data = try? Data(contentsOf: file),
-              let json = try? FirefoxSession.decompressMozLz4(data),
-              let urls = try? FirefoxSession.openTabURLs(sessionJSON: json)
-        else { return [] }
-        return FirefoxSession.openBlockedHostnames(in: urls, blocked: hostnames)
+        guard isFirefoxRunning else {
+            Log.browsers.notice("Firefox not running; nothing to check")
+            return []
+        }
+        guard let file = newestFirefoxProfileFile("sessionstore-backups/recovery.jsonlz4") else {
+            Log.browsers.error("No Firefox session file found (profiles unreadable or missing)")
+            return []
+        }
+        do {
+            let data = try Data(contentsOf: file)
+            let json = try FirefoxSession.decompressMozLz4(data)
+            let urls = try FirefoxSession.openTabURLs(sessionJSON: json)
+            let open = FirefoxSession.openBlockedHostnames(in: urls, blocked: hostnames)
+            Log.browsers.notice("Firefox session \(file.path(), privacy: .public): \(data.count) bytes, \(urls.count) tabs, blocked open: \(open.sorted(), privacy: .public)")
+            return open
+        } catch {
+            Log.browsers.error("Reading Firefox session \(file.path(), privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     /// Whether Firefox reopens previous windows and tabs on launch, so a restart is harmless.
@@ -128,7 +141,11 @@ enum BrowserTabs {
     private static func newestFirefoxProfileFile(_ relativePath: String) -> URL? {
         let profiles = FileManager.default.homeDirectoryForCurrentUser
             .appending(path: "Library/Application Support/Firefox/Profiles", directoryHint: .isDirectory)
-        guard let entries = try? FileManager.default.contentsOfDirectory(at: profiles, includingPropertiesForKeys: nil) else {
+        let entries: [URL]
+        do {
+            entries = try FileManager.default.contentsOfDirectory(at: profiles, includingPropertiesForKeys: nil)
+        } catch {
+            Log.browsers.error("Can't list Firefox profiles: \(String(describing: error), privacy: .public)")
             return nil
         }
         return entries

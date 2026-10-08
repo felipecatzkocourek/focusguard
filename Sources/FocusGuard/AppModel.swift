@@ -104,6 +104,7 @@ final class AppModel {
 
         let now = Date()
         state.isBlocking = shouldBlock
+        Log.session.notice("Session \(shouldBlock ? "started" : "ended", privacy: .public) (Focus: \(self.focus.activeModeIdentifier ?? "none", privacy: .public))")
         if shouldBlock {
             log.record(.sessionStarted(focus: focus.activeMode?.name ?? "Focus"), at: now)
             onSessionStarted?()
@@ -212,12 +213,14 @@ final class AppModel {
         defer { isApplying = false }
         do {
             try await helper.block(planned)
+            Log.hosts.notice("Applied \(planned.count) blocked hostnames (was \(current?.count ?? -1))")
             lastFailure = nil
             lastError = nil
             await clearOpenTabs(of: Set(planned).subtracting(current ?? []))
         } catch {
             lastFailure = (planned, now)
             lastError = error.localizedDescription
+            Log.hosts.error("Applying hosts failed: \(error.localizedDescription, privacy: .public)")
             if case HelperClient.Failure.notInstalled = error { helperStatus = .notInstalled }
         }
     }
@@ -244,6 +247,7 @@ final class AppModel {
 
         let inFirefox = await Task.detached { BrowserTabs.firefoxTabs(showing: newlyBlocked) }.value
         guard !inFirefox.isEmpty else { return }
+        Log.browsers.notice("Asking to restart Firefox for \(inFirefox.sorted(), privacy: .public)")
         let prompt = FirefoxRestartPrompt(hostnames: inFirefox, restoresTabs: BrowserTabs.firefoxRestoresSession)
         firefoxRestartPrompt = prompt
         onFirefoxNeedsRestart?(prompt)
