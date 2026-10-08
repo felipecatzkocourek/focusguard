@@ -3,30 +3,38 @@ import Foundation
 import Observation
 import ServiceManagement
 
-/// Single source of truth for the app. Views observe it; the app delegate feeds it
-/// commands from the URL scheme; it keeps `/etc/hosts` in sync through the helper.
+/// Single source of truth for the app. It watches the system Focus, decides when a
+/// blocking session starts and ends, and keeps `/etc/hosts` in sync through the helper.
 @MainActor @Observable
 final class AppModel {
     enum HelperStatus: Equatable {
-        case checking, notInstalled, installed
+        case checking, notInstalled, outdated, installed
     }
 
     private(set) var configuration: Configuration
     private(set) var state: BlockState
     private(set) var log: ActivityLog
+    private(set) var focus: FocusSnapshot = .unknown
     private(set) var helperStatus: HelperStatus = .checking
     private(set) var lastError: String?
     private(set) var launchesAtLogin = SMAppService.mainApp.status == .enabled
 
-    /// Called when Work turns on, so the app can bring the dashboard up.
-    @ObservationIgnored var onWorkStarted: (() -> Void)?
+    /// Called when a blocking session starts, so the app can bring the dashboard up.
+    @ObservationIgnored var onSessionStarted: (() -> Void)?
+
+    /// How often the Focus database and `/etc/hosts` are checked. Cheap: two small
+    /// JSON files and the hosts file.
+    static let pollInterval: TimeInterval = 2
+    /// After a failed helper call, wait this long before retrying the same change.
+    static let retryInterval: TimeInterval = 30
 
     @ObservationIgnored private let helper = HelperClient()
     @ObservationIgnored private let configStore: JSONStore<Configuration>
     @ObservationIgnored private let stateStore: JSONStore<BlockState>
     @ObservationIgnored private let logStore: JSONStore<ActivityLog>
-    @ObservationIgnored private var appliedHostnames: [String]?
-    @ObservationIgnored private var expiryTimer: Timer?
+    @ObservationIgnored private var pollTimer: Timer?
+    @ObservationIgnored private var isApplying = false
+    @ObservationIgnored private var lastFailure: (hostnames: [String], date: Date)?
 
     init(directory: URL = JSONStore<Configuration>.applicationSupportDirectory) {
         configStore = JSONStore(url: directory.appending(path: "config.json")) { Configuration() }
@@ -37,24 +45,37 @@ final class AppModel {
         log = logStore.load()
     }
 
-    var isWorkActive: Bool { state.isWorkActive }
+    var isBlocking: Bool { state.isBlocking }
 
-    /// While Work is on, anything that would weaken the block (removing sites, lowering
-    /// friction) is locked. Adding sites is always allowed.
-    var isLocked: Bool { state.isWorkActive }
+    /// While blocking, anything that would weaken the block (removing sites or trigger
+    /// modes, lowering friction) is locked. Adding sites is always allowed.
+    var isLocked: Bool { state.isBlocking }
+
+    /// The Focus that started the current session, for display.
+    var sessionFocusName: String? {
+        guard state.isBlocking else { return nil }
+        return focus.activeMode?.name
+    }
+
+    var triggerModeNames: [String] {
+        focus.modes.filter { configuration.triggerFocusIdentifiers.contains($0.id) }.map(\.name)
+    }
 
     // MARK: - Lifecycle
 
     func start() async {
         await refreshHelperStatus()
-        await reconcile()
+        await tick()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.tick() }
+        }
     }
 
     /// Called on quit: drop temporary allowances so quitting can't be used to keep a
-    /// site unblocked past its time.
+    /// site unblocked past its time. Blocking itself stays in place.
     func prepareForTermination() {
-        expiryTimer?.invalidate()
-        guard state.isWorkActive, !state.allowances.isEmpty else { return }
+        pollTimer?.invalidate()
+        guard state.isBlocking, !state.allowances.isEmpty else { return }
         state.allowances.removeAll()
         save()
         try? helper.blockSynchronously(
@@ -62,29 +83,42 @@ final class AppModel {
         )
     }
 
-    // MARK: - Commands
-
-    func handle(_ command: FocusCommand) async {
-        let now = Date()
-        switch command {
-        case .workOn:
-            if !state.isWorkActive {
-                state.isWorkActive = true
-                log.record(.workStarted, at: now)
-            }
-            onWorkStarted?()
-        case .workOff:
-            guard state.isWorkActive else { break }
-            state.isWorkActive = false
-            state.allowances.removeAll()
-            log.record(.workEnded, at: now)
-        }
-        save()
+    /// One polling step: read the Focus, update the session, then make `/etc/hosts` match.
+    func tick() async {
+        let snapshot = await Task.detached { FocusMonitor.read() }.value
+        if snapshot != focus { focus = snapshot }
+        updateSession()
         await reconcile()
     }
 
+    // MARK: - Session
+
+    /// Starts or ends the blocking session based on the active Focus.
+    ///
+    /// If the Focus database can't be read, the current state is kept as is. Failing
+    /// closed means a broken read can never silently unblock sites.
+    private func updateSession() {
+        guard focus.access == .ok else { return }
+        let shouldBlock = configuration.shouldBlock(activeFocusIdentifier: focus.activeModeIdentifier)
+        guard shouldBlock != state.isBlocking else { return }
+
+        let now = Date()
+        state.isBlocking = shouldBlock
+        Log.session.notice("Session \(shouldBlock ? "started" : "ended", privacy: .public) (Focus: \(self.focus.activeModeIdentifier ?? "none", privacy: .public))")
+        if shouldBlock {
+            log.record(.sessionStarted(focus: focus.activeMode?.name ?? "Focus"), at: now)
+            onSessionStarted?()
+        } else {
+            state.allowances.removeAll()
+            log.record(.sessionEnded, at: now)
+        }
+        save()
+    }
+
+    // MARK: - User actions
+
     func grantAllowance(domain: String, reason: String, minutes: Int) async {
-        guard state.isWorkActive, configuration.blockedDomains.contains(domain) else { return }
+        guard state.isBlocking, configuration.blockedDomains.contains(domain) else { return }
         let now = Date()
         state.allowances.removeAll { $0.domain == domain }
         state.allowances.append(Allowance(domain: domain, reason: reason, start: now, minutes: minutes))
@@ -97,6 +131,7 @@ final class AppModel {
     func addDomain(_ input: String) async -> String? {
         guard let domain = configuration.addDomain(input) else { return nil }
         save()
+        await syncFirefoxExclusions()
         await reconcile()
         return domain
     }
@@ -105,12 +140,30 @@ final class AppModel {
         guard !isLocked else { return }
         configuration.removeDomain(domain)
         save()
+        await syncFirefoxExclusions()
         await reconcile()
+    }
+
+    func setTrigger(_ mode: FocusMode, enabled: Bool) async {
+        guard !isLocked else { return }
+        if enabled {
+            configuration.triggerFocusIdentifiers.insert(mode.id)
+        } else {
+            configuration.triggerFocusIdentifiers.remove(mode.id)
+        }
+        save()
+        await tick()
     }
 
     func updateFriction(_ update: (inout Configuration.Friction) -> Void) {
         guard !isLocked else { return }
         update(&configuration.friction)
+        save()
+    }
+
+    func setRestartsFirefoxAutomatically(_ enabled: Bool) {
+        guard !isLocked else { return }
+        configuration.restartsFirefoxAutomatically = enabled
         save()
     }
 
@@ -133,18 +186,27 @@ final class AppModel {
         } catch {
             lastError = error.localizedDescription
         }
+        lastFailure = nil
         await refreshHelperStatus()
-        appliedHostnames = nil
         await reconcile()
     }
 
     func refreshHelperStatus() async {
-        helperStatus = await helper.isAuthorized() ? .installed : .notInstalled
+        guard await helper.isAuthorized() else {
+            helperStatus = .notInstalled
+            return
+        }
+        helperStatus = await helper.apiLevel() >= HelperClient.requiredAPILevel ? .installed : .outdated
+        await syncFirefoxExclusions()
     }
 
     // MARK: - Sync with /etc/hosts
 
-    /// Expires old allowances, then makes `/etc/hosts` match the current plan.
+    /// Expires old allowances, then makes `/etc/hosts` match the plan.
+    ///
+    /// It compares against the file itself rather than a cached value, so if someone
+    /// edits FocusGuard's section by hand during a session it is restored within one
+    /// poll interval.
     func reconcile() async {
         let now = Date()
         let expired = state.pruneExpiredAllowances(at: now)
@@ -153,26 +215,108 @@ final class AppModel {
         }
         if !expired.isEmpty { save() }
 
-        let hostnames = BlockPlanner.hostnamesToBlock(configuration: configuration, state: state, at: now)
-        if hostnames != appliedHostnames {
-            do {
-                try await helper.block(hostnames)
-                appliedHostnames = hostnames
-                lastError = nil
-            } catch {
-                lastError = error.localizedDescription
-                if case HelperClient.Failure.notInstalled = error { helperStatus = .notInstalled }
-            }
+        let planned = BlockPlanner.hostnamesToBlock(configuration: configuration, state: state, at: now)
+        let current = (try? String(contentsOfFile: HostsFile.path, encoding: .utf8)).map(HostsFile.blockedHostnames(in:))
+        guard current != planned, !isApplying else { return }
+        if let lastFailure, lastFailure.hostnames == planned, now.timeIntervalSince(lastFailure.date) < Self.retryInterval {
+            return
         }
-        scheduleNextExpiry(after: now)
+
+        isApplying = true
+        defer { isApplying = false }
+        do {
+            try await helper.block(planned)
+            Log.hosts.notice("Applied \(planned.count) blocked hostnames (was \(current?.count ?? -1))")
+            lastFailure = nil
+            lastError = nil
+            await clearOpenTabs(of: Set(planned).subtracting(current ?? []))
+        } catch {
+            lastFailure = (planned, now)
+            lastError = error.localizedDescription
+            Log.hosts.error("Applying hosts failed: \(error.localizedDescription, privacy: .public)")
+            if case HelperClient.Failure.notInstalled = error { helperStatus = .notInstalled }
+        }
     }
 
-    private func scheduleNextExpiry(after now: Date) {
-        expiryTimer?.invalidate()
-        guard let next = BlockPlanner.nextChange(state: state, at: now) else { return }
-        expiryTimer = Timer.scheduledTimer(withTimeInterval: max(next.timeIntervalSince(now), 0.5), repeats: false) { [weak self] _ in
-            Task { @MainActor in await self?.reconcile() }
+    // MARK: - Browsers
+
+    /// Hostnames blocked just now that are still open in Firefox, waiting for the user to
+    /// decide whether to restart it. `nil` when there's nothing to ask about.
+    private(set) var firefoxRestartPrompt: FirefoxRestartPrompt?
+    private(set) var firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
+
+    struct FirefoxRestartPrompt: Equatable {
+        /// Blocked hostnames seen in Firefox's tabs; empty when they couldn't be checked.
+        var hostnames: Set<String>
+        var restoresTabs: Bool
+    }
+
+    /// Called when Firefox has tabs on sites that were just blocked.
+    @ObservationIgnored var onFirefoxNeedsRestart: ((FirefoxRestartPrompt) -> Void)?
+
+    /// Newly blocked sites may already be open; DNS blocking alone won't stop those tabs.
+    private func clearOpenTabs(of newlyBlocked: Set<String>) async {
+        guard !newlyBlocked.isEmpty else { return }
+        await BrowserTabs.closeTabs(showing: newlyBlocked)
+
+        let check = await Task.detached { BrowserTabs.firefoxTabs(showing: newlyBlocked) }.value
+        let hostnames: Set<String>
+        switch check {
+        case .clear: return
+        case .open(let open): hostnames = open
+        case .unknown: hostnames = []
         }
+        Log.browsers.notice("Asking to restart Firefox (open blocked: \(hostnames.sorted(), privacy: .public))")
+        let restoresTabs = BrowserTabs.firefoxRestoresSession
+        if configuration.restartsFirefoxAutomatically && restoresTabs {
+            Log.browsers.notice("Restarting Firefox automatically")
+            await restartFirefox()
+            return
+        }
+        let prompt = FirefoxRestartPrompt(hostnames: hostnames, restoresTabs: restoresTabs)
+        firefoxRestartPrompt = prompt
+        onFirefoxNeedsRestart?(prompt)
+    }
+
+    func restartFirefox() async {
+        firefoxRestartPrompt = nil
+        await BrowserTabs.restartFirefox()
+    }
+
+    func dismissFirefoxRestart() {
+        firefoxRestartPrompt = nil
+    }
+
+    /// Keeps Firefox's DNS-over-HTTPS exclusions equal to the blocked sites, so Firefox
+    /// resolves them through macOS (which honors the block) even with DNS over HTTPS on.
+    /// Done all the time, not only during sessions: Firefox reads policies at startup.
+    func syncFirefoxExclusions() async {
+        guard BrowserTabs.isFirefoxInstalled, helperStatus == .installed else { return }
+        let wanted = configuration.blockedDomains.sorted()
+        guard BrowserTabs.firefoxExcludedDomains != wanted else { return }
+        do {
+            try await helper.setFirefoxExclusions(wanted)
+            Log.browsers.notice("Firefox DNS-over-HTTPS exclusions set to \(wanted, privacy: .public)")
+        } catch {
+            Log.browsers.error("Setting Firefox exclusions failed: \(error.localizedDescription, privacy: .public)")
+            lastError = "Couldn't update Firefox's exceptions: \(error.localizedDescription)"
+        }
+    }
+
+    func installFirefoxPolicy() async {
+        do {
+            try await helper.installFirefoxPolicy()
+            lastError = nil
+        } catch HelperClient.Failure.installCancelled {
+            // The user closed the password prompt.
+        } catch {
+            lastError = error.localizedDescription
+        }
+        firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
+    }
+
+    func refreshFirefoxPolicyStatus() {
+        firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
     }
 
     private func save() {

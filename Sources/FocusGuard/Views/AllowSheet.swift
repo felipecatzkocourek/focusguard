@@ -1,7 +1,7 @@
 import FocusGuardCore
 import SwiftUI
 
-/// The friction gate: before a blocked site can be used during Work, you wait out a
+/// The friction gate: before a blocked site can be used during a session, you wait out a
 /// countdown and (optionally) write down why. Long enough to break the reflex, short
 /// enough not to get in the way when you genuinely need a tutorial.
 struct AllowSheet: View {

@@ -7,7 +7,7 @@ struct SitesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle("Sites blocked during Work")
+            SectionTitle("Sites to block")
             Text("Paste a site or any link from it. www. and mobile (m.) versions are blocked too.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -36,14 +36,20 @@ struct SitesView: View {
                         .buttonStyle(.borderless)
                         .foregroundStyle(model.isLocked ? Color.secondary : Color.red)
                         .disabled(model.isLocked)
-                        .help(model.isLocked ? "Sites can't be removed while Work is on" : "Remove \(domain)")
+                        .help(model.isLocked ? "Sites can't be removed while blocking is on" : "Remove \(domain)")
                     }
                 }
             }
             .listStyle(.bordered(alternatesRowBackgrounds: true))
 
+            if BrowserTabs.isFirefoxInstalled {
+                Label("Firefox: restart it once after adding a site, so it picks up the new DNS-over-HTTPS exception.", systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             if model.isLocked {
-                Label("While Work is on you can add sites, but not remove them.", systemImage: "lock.fill")
+                Label("While blocking is on you can add sites, but not remove them.", systemImage: "lock.fill")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

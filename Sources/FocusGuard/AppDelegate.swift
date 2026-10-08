@@ -1,9 +1,8 @@
 import AppKit
-import FocusGuardCore
 
 /// App entry point. FocusGuard uses an AppKit lifecycle (with SwiftUI views inside) so it
 /// has full control over the dashboard window — where it opens, that closing it only
-/// hides it, and that it can come forward on its own when Work starts.
+/// hides it, and that it can come forward on its own when a blocking session starts.
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -28,7 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dashboard = DashboardWindowController(model: model)
         self.dashboard = dashboard
         statusItem = StatusItemController(model: model) { [weak self] in self?.dashboard?.show(activate: true) }
-        model.onWorkStarted = { [weak self] in self?.dashboard?.show(activate: false) }
+        model.onSessionStarted = { [weak self] in self?.dashboard?.show(activate: false) }
+        model.onFirefoxNeedsRestart = { [weak self] prompt in self?.askToRestartFirefox(prompt) }
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake), name: NSWorkspace.didWakeNotification, object: nil
@@ -36,13 +36,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         dashboard.show(activate: true)
         Task { await model.start() }
-    }
-
-    func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            guard let command = FocusCommand(url: url) else { continue }
-            Task { await model.handle(command) }
-        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -58,7 +51,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.prepareForTermination()
     }
 
+    /// Firefox can't close individual tabs on request, so offer to restart it: tabs on
+    /// blocked sites then reload and hit the block.
+    private func askToRestartFirefox(_ prompt: AppModel.FirefoxRestartPrompt) {
+        let sites = ListFormatter.localizedString(byJoining: prompt.hostnames.sorted())
+        let situation = prompt.hostnames.isEmpty
+            ? "Tabs that were already open on a blocked site keep working until Firefox reconnects. Restarting makes sure they're blocked too."
+            : "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects."
+        let alert = NSAlert()
+        alert.messageText = prompt.hostnames.isEmpty ? "Restart Firefox to apply the block?" : "Restart Firefox to block \(sites)?"
+        alert.informativeText = prompt.restoresTabs
+            ? situation + " Firefox will reopen your windows and tabs after restarting."
+            : situation + "\n\nFirefox isn't set to reopen previous windows and tabs, so restarting will close all of them. (Firefox Settings → General → Startup → Open previous windows and tabs.)"
+        alert.addButton(withTitle: "Restart Firefox")
+        alert.addButton(withTitle: "Not Now")
+        alert.alertStyle = prompt.restoresTabs ? .informational : .warning
+
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task { await model.restartFirefox() }
+        } else {
+            model.dismissFirefoxRestart()
+        }
+    }
+
     @objc private func systemDidWake() {
-        Task { await model.reconcile() }
+        Task { await model.tick() }
     }
 }

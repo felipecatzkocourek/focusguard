@@ -4,6 +4,8 @@ import Foundation
 /// installed by `helper/install.sh` makes it passwordless for this one binary).
 struct HelperClient: Sendable {
     static let installedPath = "/Library/PrivilegedHelperTools/com.felipekocourek.focusguard.helper"
+    /// The helper API this build of the app needs (see `apiLevel` in the helper).
+    static let requiredAPILevel = 2
 
     enum Failure: LocalizedError {
         case notInstalled
@@ -35,6 +37,17 @@ struct HelperClient: Sendable {
         return (try? await runHelper(["status"])) != nil
     }
 
+    /// The installed helper's API level. Helpers from before levels existed report 1.
+    func apiLevel() async -> Int {
+        guard let output = try? await runHelper(["api-level"]) else { return 1 }
+        return Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1
+    }
+
+    /// Sets Firefox's DNS-over-HTTPS exclusions to exactly `domains`.
+    func setFirefoxExclusions(_ domains: [String]) async throws {
+        try await runHelper(["firefox-exclude"] + domains)
+    }
+
     /// Makes FocusGuard's hosts section block exactly `hostnames` (empty clears it).
     func block(_ hostnames: [String]) async throws {
         try await runHelper(hostnames.isEmpty ? ["clear"] : ["block"] + hostnames)
@@ -47,11 +60,23 @@ struct HelperClient: Sendable {
 
     /// Runs the bundled `install.sh` through the standard macOS administrator prompt.
     func install() async throws {
-        guard let script = Bundle.main.url(forResource: "install", withExtension: "sh"),
-              let binary = Bundle.main.url(forResource: "focusguard-helper", withExtension: nil)
-        else { throw Failure.bundleResourcesMissing }
+        guard let binary = Bundle.main.url(forResource: "focusguard-helper", withExtension: nil) else {
+            throw Failure.bundleResourcesMissing
+        }
+        try await runBundledScriptAsAdmin("install", arguments: [binary.path(), NSUserName()])
+    }
 
-        let shellCommand = [script.path(), binary.path(), NSUserName()].map(Self.shellQuoted).joined(separator: " ")
+    /// Installs the Firefox policy that turns off Firefox's own DNS cache.
+    func installFirefoxPolicy() async throws {
+        try await runBundledScriptAsAdmin("firefox-policy", arguments: ["install"])
+    }
+
+    /// Runs `<name>.sh` from the app bundle as root via the standard admin prompt.
+    private func runBundledScriptAsAdmin(_ name: String, arguments: [String]) async throws {
+        guard let script = Bundle.main.url(forResource: name, withExtension: "sh") else {
+            throw Failure.bundleResourcesMissing
+        }
+        let shellCommand = ([script.path()] + arguments).map(Self.shellQuoted).joined(separator: " ")
         let appleScript = "do shell script \"\(Self.appleScriptEscaped(shellCommand))\" with administrator privileges"
 
         do {

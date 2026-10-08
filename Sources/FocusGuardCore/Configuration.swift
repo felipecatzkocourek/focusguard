@@ -2,10 +2,14 @@ import Foundation
 
 /// User-editable settings, persisted as JSON.
 public struct Configuration: Codable, Equatable, Sendable {
-    /// Domains blocked while Work is active, already normalized (see ``Domain``).
+    /// Domains blocked during a session, already normalized (see ``Domain``).
     public var blockedDomains: [String]
+    /// Focus modes (by identifier) that turn blocking on.
+    public var triggerFocusIdentifiers: Set<String>
     /// Settings for temporarily allowing a blocked site.
     public var friction: Friction
+    /// Restart Firefox without asking when blocking starts (only if it restores its tabs).
+    public var restartsFirefoxAutomatically: Bool
 
     public struct Friction: Codable, Equatable, Sendable {
         /// Seconds the user has to wait before a temporary unblock can be confirmed.
@@ -25,10 +29,35 @@ public struct Configuration: Codable, Equatable, Sendable {
     }
 
     public static let defaultDomains = ["instagram.com", "youtube.com"]
+    public static let defaultTriggerFocusIdentifiers: Set<String> = ["com.apple.focus.work"]
 
-    public init(blockedDomains: [String] = Configuration.defaultDomains, friction: Friction = Friction()) {
+    public init(
+        blockedDomains: [String] = Configuration.defaultDomains,
+        triggerFocusIdentifiers: Set<String> = Configuration.defaultTriggerFocusIdentifiers,
+        friction: Friction = Friction(),
+        restartsFirefoxAutomatically: Bool = true
+    ) {
         self.blockedDomains = blockedDomains
+        self.triggerFocusIdentifiers = triggerFocusIdentifiers
         self.friction = friction
+        self.restartsFirefoxAutomatically = restartsFirefoxAutomatically
+    }
+
+    /// Decodes leniently so settings saved by an older version (missing newer keys) keep
+    /// the user's sites instead of falling back to defaults.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        blockedDomains = try container.decodeIfPresent([String].self, forKey: .blockedDomains) ?? Self.defaultDomains
+        triggerFocusIdentifiers = try container.decodeIfPresent(Set<String>.self, forKey: .triggerFocusIdentifiers)
+            ?? Self.defaultTriggerFocusIdentifiers
+        friction = try container.decodeIfPresent(Friction.self, forKey: .friction) ?? Friction()
+        restartsFirefoxAutomatically = try container.decodeIfPresent(Bool.self, forKey: .restartsFirefoxAutomatically) ?? true
+    }
+
+    /// Whether the given active Focus (or none) should turn blocking on.
+    public func shouldBlock(activeFocusIdentifier: String?) -> Bool {
+        guard let activeFocusIdentifier else { return false }
+        return triggerFocusIdentifiers.contains(activeFocusIdentifier)
     }
 
     /// Adds a domain from free-form input. Returns the normalized domain, or `nil` if the
