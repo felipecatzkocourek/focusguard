@@ -24,16 +24,5 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Felipe Kocourek. MIT License.</string>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleURLName</key>
-            <string>com.felipekocourek.focusguard</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>focusguard</string>
-            </array>
-        </dict>
-    </array>
 </dict>
 </plist>

@@ -1,18 +1,20 @@
 import AppKit
-import FocusGuardCore
 import SwiftUI
 
-/// One-time setup: install the helper, then create the two Shortcuts automations that
-/// connect the Work Focus (on the Mac or synced from the iPhone) to FocusGuard.
+/// One-time setup: install the helper, give FocusGuard permission to see the Focus, and
+/// place the window.
 struct SetupView: View {
     @Environment(AppModel.self) private var model
     @State private var installing = false
+
+    private static let fullDiskAccessSettings =
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 step(1, "Install the blocking helper", done: model.helperStatus == .installed) {
-                    Text("FocusGuard blocks sites through /etc/hosts, which only an administrator can change. This installs a tiny helper once, so you won't be asked for your password every time Work turns on.")
+                    Text("FocusGuard blocks sites through /etc/hosts, which only an administrator can change. This installs a tiny helper once, so you won't be asked for your password every time blocking starts.")
                     HStack {
                         switch model.helperStatus {
                         case .installed:
@@ -34,24 +36,38 @@ struct SetupView: View {
                     }
                 }
 
-                step(2, "Connect it to the Work Focus", done: false) {
-                    Text("In Shortcuts, create two personal automations. If Focus is shared across devices, switching Work on your iPhone will trigger them on this Mac too.")
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("1. Open Shortcuts → **Automation** → **New Automation**.")
-                        Text("2. Choose **Focus** → **Work** → **When Turning On**, set it to **Run Immediately**.")
-                        Text("3. Add the action **Open URLs** with:")
-                        URLRow(url: FocusCommand.workOn.url)
-                        Text("4. Repeat with **When Turning Off** and:")
-                        URLRow(url: FocusCommand.workOff.url)
-                    }
-                    .font(.callout)
-                    Button("Open Shortcuts") {
-                        NSWorkspace.shared.open(URL(filePath: "/System/Applications/Shortcuts.app"))
+                step(2, "Let FocusGuard see your Focus", done: model.focus.access == .ok) {
+                    Text("macOS keeps the current Focus in a protected file. FocusGuard reads it to start blocking the moment you turn on a chosen Focus, from this Mac or from your iPhone (with **Share Across Devices** on). No Shortcuts automation is needed, and nothing but the Focus switch can turn blocking off.")
+                    switch model.focus.access {
+                    case .ok:
+                        Label(
+                            model.focus.activeMode.map { "Working. Current Focus: \($0.name)" } ?? "Working. No Focus is on right now.",
+                            systemImage: "checkmark.circle.fill"
+                        )
+                        .foregroundStyle(.green)
+                    case .needsFullDiskAccess:
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("1. Open **Privacy & Security → Full Disk Access**.")
+                            Text("2. Click **+**, choose **FocusGuard** in Applications, and turn it on.")
+                            Text("3. Come back here. It's detected automatically within a few seconds.")
+                        }
+                        .font(.callout)
+                        Button("Open Full Disk Access Settings") {
+                            NSWorkspace.shared.open(Self.fullDiskAccessSettings)
+                        }
+                    case .unreadable(let reason):
+                        Label(reason, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                     }
                 }
 
-                step(3, "Put this window where it helps", done: false) {
-                    Text("Drag this window to your second monitor. FocusGuard remembers where it was and comes forward there whenever Work starts. Turn on **Open FocusGuard when I log in** in Settings so it's always ready.")
+                step(3, "Choose which Focus modes block", done: !model.configuration.triggerFocusIdentifiers.isEmpty) {
+                    Text(model.triggerModeNames.isEmpty
+                         ? "Pick them in **Settings**."
+                         : "Blocking starts with: **\(ListFormatter.localizedString(byJoining: model.triggerModeNames))**. Change this in Settings.")
+                }
+
+                step(4, "Put this window where it helps", done: false) {
+                    Text("Drag this window to your second monitor. FocusGuard remembers where it was and comes forward there whenever blocking starts. Turn on **Open FocusGuard when I log in** in Settings so it's always watching.")
                 }
             }
             .padding(4)
@@ -74,28 +90,5 @@ struct SetupView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-}
-
-private struct URLRow: View {
-    let url: URL
-    @State private var copied = false
-
-    var body: some View {
-        HStack {
-            Text(url.absoluteString)
-                .font(.body.monospaced())
-                .textSelection(.enabled)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.12)))
-            Button(copied ? "Copied" : "Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(url.absoluteString, forType: .string)
-                copied = true
-            }
-            .buttonStyle(.link)
-        }
-        .padding(.leading, 16)
     }
 }

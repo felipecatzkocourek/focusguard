@@ -24,7 +24,7 @@ final class DashboardWindowController {
     }
 
     /// `activate: false` brings the window forward without stealing keyboard focus from
-    /// whatever you're doing (used when Work starts automatically).
+    /// whatever you're doing (used when a session starts automatically).
     func show(activate: Bool) {
         if window.isMiniaturized { window.deminiaturize(nil) }
         if activate {
@@ -72,14 +72,16 @@ final class StatusItemController: NSObject {
     }
 
     private func render() {
-        let active = model.isWorkActive
+        let active = model.isBlocking
         let image = NSImage(
             systemSymbolName: active ? "shield.lefthalf.filled" : "shield",
             accessibilityDescription: active ? "FocusGuard: blocking" : "FocusGuard: off"
         )
         image?.isTemplate = true
         item.button?.image = image
-        statusLine.title = active ? "Work · blocking \(model.configuration.blockedDomains.count) sites" : "Off · nothing blocked"
+        statusLine.title = active
+            ? "\(model.sessionFocusName ?? "Focus") · blocking \(model.configuration.blockedDomains.count) sites"
+            : "Off · nothing blocked"
     }
 
     @objc private func openDashboardAction() { openDashboard() }

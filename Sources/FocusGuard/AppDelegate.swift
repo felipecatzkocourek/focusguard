@@ -1,9 +1,8 @@
 import AppKit
-import FocusGuardCore
 
 /// App entry point. FocusGuard uses an AppKit lifecycle (with SwiftUI views inside) so it
 /// has full control over the dashboard window — where it opens, that closing it only
-/// hides it, and that it can come forward on its own when Work starts.
+/// hides it, and that it can come forward on its own when a blocking session starts.
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -28,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dashboard = DashboardWindowController(model: model)
         self.dashboard = dashboard
         statusItem = StatusItemController(model: model) { [weak self] in self?.dashboard?.show(activate: true) }
-        model.onWorkStarted = { [weak self] in self?.dashboard?.show(activate: false) }
+        model.onSessionStarted = { [weak self] in self?.dashboard?.show(activate: false) }
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake), name: NSWorkspace.didWakeNotification, object: nil
@@ -36,13 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         dashboard.show(activate: true)
         Task { await model.start() }
-    }
-
-    func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            guard let command = FocusCommand(url: url) else { continue }
-            Task { await model.handle(command) }
-        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -59,6 +51,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func systemDidWake() {
-        Task { await model.reconcile() }
+        Task { await model.tick() }
     }
 }

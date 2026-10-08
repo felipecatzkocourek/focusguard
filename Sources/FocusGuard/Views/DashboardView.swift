@@ -30,6 +30,12 @@ struct DashboardView: View {
     }
 
     private var bannerMessage: (text: String, showSetup: Bool)? {
+        if model.focus.access == .needsFullDiskAccess && tab != .setup {
+            return ("FocusGuard needs Full Disk Access to see which Focus is on.", true)
+        }
+        if case .unreadable(let reason) = model.focus.access {
+            return (reason, false)
+        }
         if model.helperStatus == .notInstalled && tab != .setup {
             return ("The helper isn't installed, so sites can't be blocked yet.", true)
         }
@@ -83,8 +89,8 @@ struct TodayView: View {
                 SectionTitle("Blocked sites")
                 Spacer()
                 Button("Temporarily allow…") { showingAllowSheet = true }
-                    .disabled(!model.isWorkActive || model.configuration.blockedDomains.isEmpty)
-                    .help(model.isWorkActive ? "Unblock one site for a few minutes" : "Only needed while Work is on")
+                    .disabled(!model.isBlocking || model.configuration.blockedDomains.isEmpty)
+                    .help(model.isBlocking ? "Unblock one site for a few minutes" : "Only needed while blocking is on")
             }
             GroupBox {
                 if model.configuration.blockedDomains.isEmpty {
@@ -133,23 +139,29 @@ struct TodayView: View {
 private struct StatusCard: View {
     @Environment(AppModel.self) private var model
 
+    private var idleHint: String {
+        let names = model.triggerModeNames
+        if names.isEmpty { return "Pick which Focus modes block sites in Settings." }
+        return "Turn on \(ListFormatter.localizedString(byJoining: names)) to start blocking."
+    }
+
     var body: some View {
-        let active = model.isWorkActive
+        let active = model.isBlocking
         HStack(spacing: 16) {
             Image(systemName: active ? "shield.lefthalf.filled" : "shield")
                 .font(.system(size: 44, weight: .semibold))
                 .foregroundStyle(active ? Color.accentColor : .secondary)
                 .frame(width: 60)
             VStack(alignment: .leading, spacing: 4) {
-                Text(active ? "Work · Blocking on" : "Off")
+                Text(active ? "\(model.sessionFocusName ?? "Focus") · Blocking on" : "Off")
                     .font(.system(size: 26, weight: .bold))
                 Text(active
-                     ? "Turn off the Work Focus on your iPhone or Mac to stop blocking."
-                     : "Turn on the Work Focus to start blocking.")
+                     ? "Turn off the \(model.sessionFocusName ?? "") Focus on your iPhone or Mac to stop blocking."
+                     : idleHint)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Label("\(formatDuration(model.log.workDuration(onDayOf: context.date))) in Work today", systemImage: "clock")
+                    Label("\(formatDuration(model.log.blockingDuration(onDayOf: context.date))) blocked today", systemImage: "clock")
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -178,7 +190,7 @@ private struct SiteRow: View {
     }
 
     @ViewBuilder private var pill: some View {
-        if !model.isWorkActive {
+        if !model.isBlocking {
             StatusPill(text: "Not blocked", color: .secondary)
         } else if let allowance = model.state.allowance(for: domain, at: now) {
             StatusPill(text: "Allowed · \(formatCountdown(allowance.expires.timeIntervalSince(now))) left", color: .orange)
@@ -204,8 +216,8 @@ private struct ActivityRow: View {
 
     private var icon: String {
         switch event.kind {
-        case .workStarted: "play.fill"
-        case .workEnded: "stop.fill"
+        case .sessionStarted: "play.fill"
+        case .sessionEnded: "stop.fill"
         case .allowanceGranted: "lock.open.fill"
         case .allowanceExpired: "lock.fill"
         }
@@ -213,8 +225,8 @@ private struct ActivityRow: View {
 
     private var color: Color {
         switch event.kind {
-        case .workStarted: .green
-        case .workEnded: .secondary
+        case .sessionStarted: .green
+        case .sessionEnded: .secondary
         case .allowanceGranted: .orange
         case .allowanceExpired: .red
         }
@@ -222,8 +234,8 @@ private struct ActivityRow: View {
 
     private var description: String {
         switch event.kind {
-        case .workStarted: "Work started"
-        case .workEnded: "Work ended"
+        case .sessionStarted(let focus): "\(focus) on · blocking started"
+        case .sessionEnded: "Blocking ended"
         case .allowanceGranted(let domain, let reason, let minutes):
             reason.isEmpty ? "Allowed \(domain) for \(minutes) min" : "Allowed \(domain) for \(minutes) min: “\(reason)”"
         case .allowanceExpired(let domain): "\(domain) blocked again"
