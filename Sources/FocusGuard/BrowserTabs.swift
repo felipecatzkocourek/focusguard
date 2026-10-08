@@ -81,8 +81,8 @@ enum BrowserTabs {
         case clear
         /// These blocked hostnames are open in Firefox.
         case open(Set<String>)
-        /// Firefox has windows on screen that its saved session doesn't describe, so we
-        /// can't tell what's open.
+        /// Firefox has windows open but no blocked site could be confirmed in them. Its
+        /// saved session isn't always complete, so we still offer a restart.
         case unknown
     }
 
@@ -109,7 +109,7 @@ enum BrowserTabs {
 
             Log.browsers.notice("Firefox session shape: \(FirefoxSession.summary(sessionJSON: json), privacy: .public)")
             Log.browsers.notice("Firefox session files: \(firefoxSessionFilesDescription, privacy: .public)")
-            return sessionWindows == 0 && visibleWindows > 0 ? .unknown : .clear
+            return visibleWindows > 0 ? .unknown : .clear
         } catch {
             Log.browsers.error("Reading Firefox session \(file.path(), privacy: .public) failed: \(String(describing: error), privacy: .public)")
             return visibleWindows > 0 ? .unknown : .clear

@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func askToRestartFirefox(_ prompt: AppModel.FirefoxRestartPrompt) {
         let sites = ListFormatter.localizedString(byJoining: prompt.hostnames.sorted())
         let situation = prompt.hostnames.isEmpty
-            ? "FocusGuard couldn't check which sites Firefox has open. Tabs that were already open on a blocked site keep working until Firefox reconnects."
+            ? "Tabs that were already open on a blocked site keep working until Firefox reconnects. Restarting makes sure they're blocked too."
             : "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects."
         let alert = NSAlert()
         alert.messageText = prompt.hostnames.isEmpty ? "Restart Firefox to apply the block?" : "Restart Firefox to block \(sites)?"
