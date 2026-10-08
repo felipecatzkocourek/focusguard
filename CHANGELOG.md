@@ -27,5 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional Firefox policy that disables Firefox's DNS cache, so blocking and unblocking
   take effect immediately (installed from Setup, removed by `uninstall.sh`).
 
+- Blocked sites are kept in Firefox's DNS-over-HTTPS exceptions (via the helper), so
+  blocking works with DNS over HTTPS on. The helper reports an API level, and the app asks
+  to update an outdated helper.
+
 ### Fixed
 - Firefox ignoring block changes until restarted (#16).

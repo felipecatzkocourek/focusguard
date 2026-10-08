@@ -4,6 +4,8 @@ import Foundation
 /// installed by `helper/install.sh` makes it passwordless for this one binary).
 struct HelperClient: Sendable {
     static let installedPath = "/Library/PrivilegedHelperTools/com.felipekocourek.focusguard.helper"
+    /// The helper API this build of the app needs (see `apiLevel` in the helper).
+    static let requiredAPILevel = 2
 
     enum Failure: LocalizedError {
         case notInstalled
@@ -33,6 +35,17 @@ struct HelperClient: Sendable {
     func isAuthorized() async -> Bool {
         guard isInstalled else { return false }
         return (try? await runHelper(["status"])) != nil
+    }
+
+    /// The installed helper's API level. Helpers from before levels existed report 1.
+    func apiLevel() async -> Int {
+        guard let output = try? await runHelper(["api-level"]) else { return 1 }
+        return Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1
+    }
+
+    /// Sets Firefox's DNS-over-HTTPS exclusions to exactly `domains`.
+    func setFirefoxExclusions(_ domains: [String]) async throws {
+        try await runHelper(["firefox-exclude"] + domains)
     }
 
     /// Makes FocusGuard's hosts section block exactly `hostnames` (empty clears it).

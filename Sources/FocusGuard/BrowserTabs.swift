@@ -121,6 +121,15 @@ enum BrowserTabs {
         _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
+    /// Domains currently excluded from DNS over HTTPS by Firefox's system policy.
+    static var firefoxExcludedDomains: [String] {
+        let value = CFPreferencesCopyValue(
+            FirefoxPolicy.dnsOverHTTPSKey as CFString, FirefoxPolicy.applicationID as CFString,
+            kCFPreferencesAnyUser, kCFPreferencesAnyHost
+        ) as? [String: Any]
+        return FirefoxPolicy.excludedDomains(in: value).sorted()
+    }
+
     /// Whether FocusGuard's Firefox policy (DNS cache disabled) is in place.
     static var isFirefoxPolicyInstalled: Bool {
         guard let plist = NSDictionary(contentsOfFile: "/Library/Preferences/org.mozilla.firefox.plist"),

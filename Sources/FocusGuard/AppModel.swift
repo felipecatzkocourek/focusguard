@@ -8,7 +8,7 @@ import ServiceManagement
 @MainActor @Observable
 final class AppModel {
     enum HelperStatus: Equatable {
-        case checking, notInstalled, installed
+        case checking, notInstalled, outdated, installed
     }
 
     private(set) var configuration: Configuration
@@ -131,6 +131,7 @@ final class AppModel {
     func addDomain(_ input: String) async -> String? {
         guard let domain = configuration.addDomain(input) else { return nil }
         save()
+        await syncFirefoxExclusions()
         await reconcile()
         return domain
     }
@@ -139,6 +140,7 @@ final class AppModel {
         guard !isLocked else { return }
         configuration.removeDomain(domain)
         save()
+        await syncFirefoxExclusions()
         await reconcile()
     }
 
@@ -184,7 +186,12 @@ final class AppModel {
     }
 
     func refreshHelperStatus() async {
-        helperStatus = await helper.isAuthorized() ? .installed : .notInstalled
+        guard await helper.isAuthorized() else {
+            helperStatus = .notInstalled
+            return
+        }
+        helperStatus = await helper.apiLevel() >= HelperClient.requiredAPILevel ? .installed : .outdated
+        await syncFirefoxExclusions()
     }
 
     // MARK: - Sync with /etc/hosts
@@ -260,6 +267,22 @@ final class AppModel {
 
     func dismissFirefoxRestart() {
         firefoxRestartPrompt = nil
+    }
+
+    /// Keeps Firefox's DNS-over-HTTPS exclusions equal to the blocked sites, so Firefox
+    /// resolves them through macOS (which honors the block) even with DNS over HTTPS on.
+    /// Done all the time, not only during sessions: Firefox reads policies at startup.
+    func syncFirefoxExclusions() async {
+        guard BrowserTabs.isFirefoxInstalled, helperStatus == .installed else { return }
+        let wanted = configuration.blockedDomains.sorted()
+        guard BrowserTabs.firefoxExcludedDomains != wanted else { return }
+        do {
+            try await helper.setFirefoxExclusions(wanted)
+            Log.browsers.notice("Firefox DNS-over-HTTPS exclusions set to \(wanted, privacy: .public)")
+        } catch {
+            Log.browsers.error("Setting Firefox exclusions failed: \(error.localizedDescription, privacy: .public)")
+            lastError = "Couldn't update Firefox's exceptions: \(error.localizedDescription)"
+        }
     }
 
     func installFirefoxPolicy() async {

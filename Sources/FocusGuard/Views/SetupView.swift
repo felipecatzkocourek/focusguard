@@ -22,8 +22,12 @@ struct SetupView: View {
                             Label("Installed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                         case .checking:
                             ProgressView().controlSize(.small)
-                        case .notInstalled:
-                            Button(installing ? "Installing…" : "Install Helper…") {
+                        case .notInstalled, .outdated:
+                            if model.helperStatus == .outdated {
+                                Text("This version of FocusGuard needs a newer helper.")
+                                    .foregroundStyle(.orange)
+                            }
+                            Button(installing ? "Installing…" : model.helperStatus == .outdated ? "Update Helper…" : "Install Helper…") {
                                 installing = true
                                 Task {
                                     await model.installHelper()
@@ -70,6 +74,7 @@ struct SetupView: View {
                 if BrowserTabs.isFirefoxInstalled {
                     step(4, "Make Firefox react instantly", done: model.firefoxPolicyInstalled) {
                         Text("Firefox keeps its own address cache, so on its own it notices blocking (and unblocking) only after a minute or more, or after a restart. A Firefox policy turns that cache off. Firefox will say it's *managed by your organization* because of it.")
+                        Text("If you use **DNS over HTTPS** in Firefox, FocusGuard also adds your blocked sites to its exceptions automatically, so they're looked up through macOS and get blocked, while DNS over HTTPS stays on for everything else. Firefox picks up newly added sites after a restart.")
                         HStack {
                             if model.firefoxPolicyInstalled {
                                 Label("Installed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)

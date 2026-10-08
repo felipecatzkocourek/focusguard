@@ -109,7 +109,8 @@ Then follow the **Setup** tab in the app:
 3. **Pick your trigger modes** in Settings (Work by default).
 4. **Firefox users:** click *Install Firefox Policy…* (admin password). In Firefox, turn on
    *Settings → General → Startup → Open previous windows and tabs*, then quit Firefox with
-   ⌘Q and reopen it once.
+   ⌘Q and reopen it once. If you use DNS over HTTPS in Firefox, leave it on: FocusGuard
+   adds your blocked sites to its exceptions automatically.
 5. **Safari/Chrome users:** the first time a blocked tab is open when blocking starts,
    macOS asks whether FocusGuard may control the browser. Click **Allow**.
 6. **Drag the window to your second monitor** and turn on *Open FocusGuard when I log in*.
@@ -135,7 +136,7 @@ rights. FocusGuard keeps the privileged part as small and auditable as possible:
 | Who can replace the helper | It's installed in `/Library/PrivilegedHelperTools`, owned by `root:wheel`, mode `755`. A normal user can't modify it. |
 | Password-less sudo scope | `/etc/sudoers.d/focusguard` allows **only that one binary** for **only your user**. The rule is checked with `visudo -cf` before it's installed. |
 | Full Disk Access | Used only to read the Focus database and Firefox's saved session (to find open tabs). The app never writes there. |
-| Firefox policy | Optional. Only sets `network.dnsCacheExpiration` and its grace period to 0 in `/Library/Preferences/org.mozilla.firefox.plist`; other policies are kept, and `uninstall.sh` removes it. |
+| Firefox policy | Optional. Sets `network.dnsCacheExpiration` and its grace period to 0 in `/Library/Preferences/org.mozilla.firefox.plist`, and the helper keeps `DNSOverHTTPS.ExcludedDomains` equal to the blocked sites (it never turns DNS over HTTPS on or off). Other policies are kept, and `uninstall.sh` removes ours. |
 | Browser control | Only Safari and Chrome, only when running, only to close tabs of blocked sites. macOS asks for permission per browser. |
 | Injection into `/etc/hosts` | Every argument must pass a strict RFC 1123 hostname check. Newlines, spaces, IPs and anything else are rejected before the file is touched. |
 | Damaging the hosts file | Only lines between `# BEGIN FocusGuard` and `# END FocusGuard` are ever rewritten. Writes are atomic (temp file + `rename`), so a crash can't leave a half-written file. |
@@ -151,6 +152,10 @@ The worst a compromised user account can do with the helper is block or unblock 
   Firefox, the optional policy turns its own cache off. Chrome keeps a short (~1 min) cache
   of its own; FocusGuard closes Chrome tabs of blocked sites, but a brand-new Chrome tab can
   still load a just-blocked site for up to a minute.
+- **Firefox with DNS over HTTPS** skips `/etc/hosts` for names it resolves over HTTPS.
+  FocusGuard adds every blocked site to Firefox's DNS-over-HTTPS exceptions, so they're
+  resolved through macOS instead. Firefox reads policies at startup, so it needs one
+  restart after you add a site.
 - **Firefox tab detection** uses Firefox's saved session, which is written about every
   15 s, so a tab opened seconds before blocking starts may be missed.
 - **No wildcard subdomains.** `/etc/hosts` can't express `*.youtube.com`; FocusGuard

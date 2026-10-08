@@ -45,6 +45,11 @@ case "${1:-}" in
   uninstall)
     [[ -f "$PLIST" ]] || exit 0
     for pref in "${PREFS[@]}"; do delete ":Preferences:$pref"; done
+    # DNS-over-HTTPS exclusions written by the helper.
+    delete ":DNSOverHTTPS:ExcludedDomains"
+    if ! "$BUDDY" -c "Print :DNSOverHTTPS" "$PLIST" 2>/dev/null | grep -q " = "; then
+      delete ":DNSOverHTTPS"
+    fi
     # Remove what we created if nothing else is left in the file.
     if ! "$BUDDY" -c "Print :Preferences" "$PLIST" 2>/dev/null | grep -q " = "; then
       delete ":Preferences"

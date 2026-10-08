@@ -39,6 +39,9 @@ struct DashboardView: View {
         if model.helperStatus == .notInstalled && tab != .setup {
             return ("The helper isn't installed, so sites can't be blocked yet.", true)
         }
+        if model.helperStatus == .outdated && tab != .setup {
+            return ("The helper needs an update for this version of FocusGuard.", true)
+        }
         if let error = model.lastError {
             return (error, false)
         }
