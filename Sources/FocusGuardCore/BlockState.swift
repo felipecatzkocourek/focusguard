@@ -22,12 +22,12 @@ public struct Allowance: Codable, Equatable, Sendable, Identifiable {
 
 /// The runtime state that survives app restarts.
 public struct BlockState: Codable, Equatable, Sendable {
-    /// Whether the Work Focus is on (as last reported by the Shortcuts automation).
-    public var isWorkActive: Bool
+    /// Whether a blocking session is running (one of the trigger Focus modes is on).
+    public var isBlocking: Bool
     public var allowances: [Allowance]
 
-    public init(isWorkActive: Bool = false, allowances: [Allowance] = []) {
-        self.isWorkActive = isWorkActive
+    public init(isBlocking: Bool = false, allowances: [Allowance] = []) {
+        self.isBlocking = isBlocking
         self.allowances = allowances
     }
 
@@ -52,7 +52,7 @@ public struct BlockState: Codable, Equatable, Sendable {
 /// Decides which hostnames must be in `/etc/hosts` right now.
 public enum BlockPlanner {
     public static func hostnamesToBlock(configuration: Configuration, state: BlockState, at now: Date) -> [String] {
-        guard state.isWorkActive else { return [] }
+        guard state.isBlocking else { return [] }
         let allowed = Set(state.activeAllowances(at: now).map(\.domain))
         return configuration.blockedDomains
             .filter { !allowed.contains($0) }
@@ -63,7 +63,7 @@ public enum BlockPlanner {
     /// When the plan will next change on its own (the earliest allowance expiry), so the
     /// app can schedule a single timer instead of polling.
     public static func nextChange(state: BlockState, at now: Date) -> Date? {
-        guard state.isWorkActive else { return nil }
+        guard state.isBlocking else { return nil }
         return state.activeAllowances(at: now).map(\.expires).min()
     }
 }
