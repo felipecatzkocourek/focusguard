@@ -22,3 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/build-app.sh` to package `FocusGuard.app`; `scripts/test.sh` that works with only
   the Command Line Tools.
 - CI on GitHub Actions; PR and issue templates.
+- Close open tabs of newly blocked sites in Safari and Chrome; offer to restart Firefox when
+  its saved session shows a blocked site open.
+- Optional Firefox policy that disables Firefox's DNS cache, so blocking and unblocking
+  take effect immediately (installed from Setup, removed by `uninstall.sh`).
+
+- Blocked sites are kept in Firefox's DNS-over-HTTPS exceptions (via the helper), so
+  blocking works with DNS over HTTPS on. The helper reports an API level, and the app asks
+  to update an outdated helper.
+
+- `scripts/create-signing-identity.sh`: a stable local code-signing identity, so
+  permissions survive rebuilds; `build-app.sh` uses it when present.
+- Diagnostics in the unified log for sessions, hosts and Firefox session parsing.
+
+- Restart Firefox automatically when blocking starts (only when it restores its tabs;
+  otherwise ask), with a toggle in Settings.
+
+### Fixed
+- Firefox ignoring block changes until restarted (#16).

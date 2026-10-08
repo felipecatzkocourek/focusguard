@@ -8,7 +8,7 @@ import ServiceManagement
 @MainActor @Observable
 final class AppModel {
     enum HelperStatus: Equatable {
-        case checking, notInstalled, installed
+        case checking, notInstalled, outdated, installed
     }
 
     private(set) var configuration: Configuration
@@ -104,6 +104,7 @@ final class AppModel {
 
         let now = Date()
         state.isBlocking = shouldBlock
+        Log.session.notice("Session \(shouldBlock ? "started" : "ended", privacy: .public) (Focus: \(self.focus.activeModeIdentifier ?? "none", privacy: .public))")
         if shouldBlock {
             log.record(.sessionStarted(focus: focus.activeMode?.name ?? "Focus"), at: now)
             onSessionStarted?()
@@ -130,6 +131,7 @@ final class AppModel {
     func addDomain(_ input: String) async -> String? {
         guard let domain = configuration.addDomain(input) else { return nil }
         save()
+        await syncFirefoxExclusions()
         await reconcile()
         return domain
     }
@@ -138,6 +140,7 @@ final class AppModel {
         guard !isLocked else { return }
         configuration.removeDomain(domain)
         save()
+        await syncFirefoxExclusions()
         await reconcile()
     }
 
@@ -155,6 +158,12 @@ final class AppModel {
     func updateFriction(_ update: (inout Configuration.Friction) -> Void) {
         guard !isLocked else { return }
         update(&configuration.friction)
+        save()
+    }
+
+    func setRestartsFirefoxAutomatically(_ enabled: Bool) {
+        guard !isLocked else { return }
+        configuration.restartsFirefoxAutomatically = enabled
         save()
     }
 
@@ -183,7 +192,12 @@ final class AppModel {
     }
 
     func refreshHelperStatus() async {
-        helperStatus = await helper.isAuthorized() ? .installed : .notInstalled
+        guard await helper.isAuthorized() else {
+            helperStatus = .notInstalled
+            return
+        }
+        helperStatus = await helper.apiLevel() >= HelperClient.requiredAPILevel ? .installed : .outdated
+        await syncFirefoxExclusions()
     }
 
     // MARK: - Sync with /etc/hosts
@@ -212,13 +226,97 @@ final class AppModel {
         defer { isApplying = false }
         do {
             try await helper.block(planned)
+            Log.hosts.notice("Applied \(planned.count) blocked hostnames (was \(current?.count ?? -1))")
             lastFailure = nil
             lastError = nil
+            await clearOpenTabs(of: Set(planned).subtracting(current ?? []))
         } catch {
             lastFailure = (planned, now)
             lastError = error.localizedDescription
+            Log.hosts.error("Applying hosts failed: \(error.localizedDescription, privacy: .public)")
             if case HelperClient.Failure.notInstalled = error { helperStatus = .notInstalled }
         }
+    }
+
+    // MARK: - Browsers
+
+    /// Hostnames blocked just now that are still open in Firefox, waiting for the user to
+    /// decide whether to restart it. `nil` when there's nothing to ask about.
+    private(set) var firefoxRestartPrompt: FirefoxRestartPrompt?
+    private(set) var firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
+
+    struct FirefoxRestartPrompt: Equatable {
+        /// Blocked hostnames seen in Firefox's tabs; empty when they couldn't be checked.
+        var hostnames: Set<String>
+        var restoresTabs: Bool
+    }
+
+    /// Called when Firefox has tabs on sites that were just blocked.
+    @ObservationIgnored var onFirefoxNeedsRestart: ((FirefoxRestartPrompt) -> Void)?
+
+    /// Newly blocked sites may already be open; DNS blocking alone won't stop those tabs.
+    private func clearOpenTabs(of newlyBlocked: Set<String>) async {
+        guard !newlyBlocked.isEmpty else { return }
+        await BrowserTabs.closeTabs(showing: newlyBlocked)
+
+        let check = await Task.detached { BrowserTabs.firefoxTabs(showing: newlyBlocked) }.value
+        let hostnames: Set<String>
+        switch check {
+        case .clear: return
+        case .open(let open): hostnames = open
+        case .unknown: hostnames = []
+        }
+        Log.browsers.notice("Asking to restart Firefox (open blocked: \(hostnames.sorted(), privacy: .public))")
+        let restoresTabs = BrowserTabs.firefoxRestoresSession
+        if configuration.restartsFirefoxAutomatically && restoresTabs {
+            Log.browsers.notice("Restarting Firefox automatically")
+            await restartFirefox()
+            return
+        }
+        let prompt = FirefoxRestartPrompt(hostnames: hostnames, restoresTabs: restoresTabs)
+        firefoxRestartPrompt = prompt
+        onFirefoxNeedsRestart?(prompt)
+    }
+
+    func restartFirefox() async {
+        firefoxRestartPrompt = nil
+        await BrowserTabs.restartFirefox()
+    }
+
+    func dismissFirefoxRestart() {
+        firefoxRestartPrompt = nil
+    }
+
+    /// Keeps Firefox's DNS-over-HTTPS exclusions equal to the blocked sites, so Firefox
+    /// resolves them through macOS (which honors the block) even with DNS over HTTPS on.
+    /// Done all the time, not only during sessions: Firefox reads policies at startup.
+    func syncFirefoxExclusions() async {
+        guard BrowserTabs.isFirefoxInstalled, helperStatus == .installed else { return }
+        let wanted = configuration.blockedDomains.sorted()
+        guard BrowserTabs.firefoxExcludedDomains != wanted else { return }
+        do {
+            try await helper.setFirefoxExclusions(wanted)
+            Log.browsers.notice("Firefox DNS-over-HTTPS exclusions set to \(wanted, privacy: .public)")
+        } catch {
+            Log.browsers.error("Setting Firefox exclusions failed: \(error.localizedDescription, privacy: .public)")
+            lastError = "Couldn't update Firefox's exceptions: \(error.localizedDescription)"
+        }
+    }
+
+    func installFirefoxPolicy() async {
+        do {
+            try await helper.installFirefoxPolicy()
+            lastError = nil
+        } catch HelperClient.Failure.installCancelled {
+            // The user closed the password prompt.
+        } catch {
+            lastError = error.localizedDescription
+        }
+        firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
+    }
+
+    func refreshFirefoxPolicyStatus() {
+        firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
     }
 
     private func save() {

@@ -1,22 +1,27 @@
 // focusguard-helper — the only FocusGuard component that runs as root.
 //
-// It does exactly one thing: rewrite FocusGuard's own section of /etc/hosts. It is
-// installed root-owned in /Library/PrivilegedHelperTools and a sudoers rule lets the
-// installing user run it (and nothing else) without a password.
+// It rewrites FocusGuard's own section of /etc/hosts and keeps Firefox's list of
+// domains excluded from DNS over HTTPS in sync with it. It is installed root-owned in
+// /Library/PrivilegedHelperTools and a sudoers rule lets the installing user run it
+// (and nothing else) without a password.
 //
-// Every argument is validated as a plain hostname before it gets anywhere near the
-// hosts file, and lines outside FocusGuard's markers are never modified.
+// Every argument is validated as a plain hostname before it is written anywhere, lines
+// outside FocusGuard's markers in /etc/hosts are never modified, and in Firefox's
+// policy only DNSOverHTTPS.ExcludedDomains is touched.
 //
 // Usage:
-//   focusguard-helper block <hostname>...   Replace the section with these hostnames
-//   focusguard-helper clear                 Remove the section
-//   focusguard-helper status                Print the hostnames currently blocked
-//   focusguard-helper version
+//   focusguard-helper block <hostname>...           Replace the section with these hostnames
+//   focusguard-helper clear                         Remove the section
+//   focusguard-helper status                        Print the hostnames currently blocked
+//   focusguard-helper firefox-exclude <domain>...   Set Firefox's DNS-over-HTTPS exclusions
+//   focusguard-helper version | api-level
 
 import FocusGuardCore
 import Foundation
 
 let version = "0.1.0"
+/// Bumped whenever a command is added, so the app can tell an outdated install apart.
+let apiLevel = 2
 let maxHostnames = 1_000
 
 enum HelperError: Error, CustomStringConvertible {
@@ -28,7 +33,7 @@ enum HelperError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .usage: "usage: focusguard-helper block <hostname>... | clear | status | version"
+        case .usage: "usage: focusguard-helper block <hostname>... | clear | status | firefox-exclude <domain>... | version | api-level"
         case .notRoot: "must be run as root (via sudo)"
         case .invalidHostname(let host): "refusing invalid hostname: \(host.debugDescription)"
         case .tooManyHostnames: "refusing more than \(maxHostnames) hostnames"
@@ -87,6 +92,25 @@ func apply(_ hostnames: [String]) throws {
     flushDNSCache()
 }
 
+/// Writes through cfprefsd (not straight to the file) so the change is never lost to a
+/// cached copy of the preferences.
+func setFirefoxExclusions(_ domains: [String]) throws {
+    guard geteuid() == 0 else { throw HelperError.notRoot }
+    let app = FirefoxPolicy.applicationID as CFString
+    let key = FirefoxPolicy.dnsOverHTTPSKey as CFString
+    let current = CFPreferencesCopyValue(key, app, kCFPreferencesAnyUser, kCFPreferencesAnyHost) as? [String: Any]
+    let updated = FirefoxPolicy.dnsOverHTTPS(current, excluding: domains)
+    guard FirefoxPolicy.excludedDomains(in: updated) != FirefoxPolicy.excludedDomains(in: current) else { return }
+
+    if !domains.isEmpty {
+        CFPreferencesSetValue("EnterprisePoliciesEnabled" as CFString, kCFBooleanTrue, app, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
+    }
+    CFPreferencesSetValue(key, updated as CFPropertyList?, app, kCFPreferencesAnyUser, kCFPreferencesAnyHost)
+    guard CFPreferencesSynchronize(app, kCFPreferencesAnyUser, kCFPreferencesAnyHost) else {
+        throw HelperError.io("cannot save Firefox policy")
+    }
+}
+
 func run(_ arguments: [String]) throws {
     guard let command = arguments.first else { throw HelperError.usage }
     let rest = Array(arguments.dropFirst())
@@ -105,8 +129,16 @@ func run(_ arguments: [String]) throws {
         for host in HostsFile.blockedHostnames(in: try readHosts()) {
             print(host)
         }
+    case "firefox-exclude":
+        guard rest.count <= maxHostnames else { throw HelperError.tooManyHostnames }
+        for domain in rest where !Domain.isValidHostname(domain) {
+            throw HelperError.invalidHostname(domain)
+        }
+        try setFirefoxExclusions(rest)
     case "version", "--version":
         print(version)
+    case "api-level":
+        print(apiLevel)
     default:
         throw HelperError.usage
     }

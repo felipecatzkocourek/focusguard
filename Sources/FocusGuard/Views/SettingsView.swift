@@ -50,6 +50,24 @@ struct SettingsView: View {
             }
             .disabled(model.isLocked)
 
+            if BrowserTabs.isFirefoxInstalled {
+                Section {
+                    Toggle("Restart Firefox automatically when blocking starts", isOn: Binding(
+                        get: { model.configuration.restartsFirefoxAutomatically },
+                        set: { model.setRestartsFirefoxAutomatically($0) }
+                    ))
+                } header: {
+                    Text("Firefox")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Tabs that are already open keep working until Firefox reconnects, and Firefox doesn't let other apps close them. Firefox is only restarted without asking when it's set to reopen previous windows and tabs; otherwise FocusGuard asks first.")
+                            .foregroundStyle(.secondary)
+                        lockedNote
+                    }
+                }
+                .disabled(model.isLocked)
+            }
+
             Section("General") {
                 Toggle("Open FocusGuard when I log in", isOn: Binding(
                     get: { model.launchesAtLogin },

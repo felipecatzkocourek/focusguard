@@ -22,6 +22,8 @@
     <string>public.app-category.productivity</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>FocusGuard closes Safari and Chrome tabs of sites that just got blocked.</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Felipe Kocourek. MIT License.</string>
 </dict>

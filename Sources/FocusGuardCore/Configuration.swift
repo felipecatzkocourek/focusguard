@@ -8,6 +8,8 @@ public struct Configuration: Codable, Equatable, Sendable {
     public var triggerFocusIdentifiers: Set<String>
     /// Settings for temporarily allowing a blocked site.
     public var friction: Friction
+    /// Restart Firefox without asking when blocking starts (only if it restores its tabs).
+    public var restartsFirefoxAutomatically: Bool
 
     public struct Friction: Codable, Equatable, Sendable {
         /// Seconds the user has to wait before a temporary unblock can be confirmed.
@@ -32,11 +34,13 @@ public struct Configuration: Codable, Equatable, Sendable {
     public init(
         blockedDomains: [String] = Configuration.defaultDomains,
         triggerFocusIdentifiers: Set<String> = Configuration.defaultTriggerFocusIdentifiers,
-        friction: Friction = Friction()
+        friction: Friction = Friction(),
+        restartsFirefoxAutomatically: Bool = true
     ) {
         self.blockedDomains = blockedDomains
         self.triggerFocusIdentifiers = triggerFocusIdentifiers
         self.friction = friction
+        self.restartsFirefoxAutomatically = restartsFirefoxAutomatically
     }
 
     /// Decodes leniently so settings saved by an older version (missing newer keys) keep
@@ -47,6 +51,7 @@ public struct Configuration: Codable, Equatable, Sendable {
         triggerFocusIdentifiers = try container.decodeIfPresent(Set<String>.self, forKey: .triggerFocusIdentifiers)
             ?? Self.defaultTriggerFocusIdentifiers
         friction = try container.decodeIfPresent(Friction.self, forKey: .friction) ?? Friction()
+        restartsFirefoxAutomatically = try container.decodeIfPresent(Bool.self, forKey: .restartsFirefoxAutomatically) ?? true
     }
 
     /// Whether the given active Focus (or none) should turn blocking on.

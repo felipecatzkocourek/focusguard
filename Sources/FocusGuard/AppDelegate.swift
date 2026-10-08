@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.dashboard = dashboard
         statusItem = StatusItemController(model: model) { [weak self] in self?.dashboard?.show(activate: true) }
         model.onSessionStarted = { [weak self] in self?.dashboard?.show(activate: false) }
+        model.onFirefoxNeedsRestart = { [weak self] prompt in self?.askToRestartFirefox(prompt) }
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake), name: NSWorkspace.didWakeNotification, object: nil
@@ -48,6 +49,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model.prepareForTermination()
+    }
+
+    /// Firefox can't close individual tabs on request, so offer to restart it: tabs on
+    /// blocked sites then reload and hit the block.
+    private func askToRestartFirefox(_ prompt: AppModel.FirefoxRestartPrompt) {
+        let sites = ListFormatter.localizedString(byJoining: prompt.hostnames.sorted())
+        let situation = prompt.hostnames.isEmpty
+            ? "Tabs that were already open on a blocked site keep working until Firefox reconnects. Restarting makes sure they're blocked too."
+            : "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects."
+        let alert = NSAlert()
+        alert.messageText = prompt.hostnames.isEmpty ? "Restart Firefox to apply the block?" : "Restart Firefox to block \(sites)?"
+        alert.informativeText = prompt.restoresTabs
+            ? situation + " Firefox will reopen your windows and tabs after restarting."
+            : situation + "\n\nFirefox isn't set to reopen previous windows and tabs, so restarting will close all of them. (Firefox Settings → General → Startup → Open previous windows and tabs.)"
+        alert.addButton(withTitle: "Restart Firefox")
+        alert.addButton(withTitle: "Not Now")
+        alert.alertStyle = prompt.restoresTabs ? .informational : .warning
+
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task { await model.restartFirefox() }
+        } else {
+            model.dismissFirefoxRestart()
+        }
     }
 
     @objc private func systemDidWake() {

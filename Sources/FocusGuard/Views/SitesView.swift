@@ -42,6 +42,12 @@ struct SitesView: View {
             }
             .listStyle(.bordered(alternatesRowBackgrounds: true))
 
+            if BrowserTabs.isFirefoxInstalled {
+                Label("Firefox: restart it once after adding a site, so it picks up the new DNS-over-HTTPS exception.", systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             if model.isLocked {
                 Label("While blocking is on you can add sites, but not remove them.", systemImage: "lock.fill")
                     .font(.callout)
