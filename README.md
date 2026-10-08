@@ -15,7 +15,7 @@ that blocking is on, how long you've been focused today, and what's blocked. Whe
 a blocked site (that one YouTube tutorial), you can unlock it for a few minutes, but only
 after waiting out a short countdown and writing down why.
 
-> **Status:** v0.1 in development. See the [roadmap](#roadmap).
+> **Status:** [v0.1.0](https://github.com/felipecatzkocourek/focusguard/releases/tag/v0.1.0) released. Pomodoro is next; see the [roadmap](#roadmap).
 
 <!-- TODO: add a screenshot / GIF of the dashboard (docs/screenshot.png) -->
 
@@ -189,7 +189,7 @@ release process.
 
 Tracked in [milestones](https://github.com/felipecatzkocourek/focusguard/milestones):
 
-- **v0.1.0:** Focus-triggered blocking, dashboard, friction-gated temporary unblocks
+- ✅ **v0.1.0:** Focus-triggered blocking, dashboard, friction-gated temporary unblocks, Firefox support
 - **v0.2.0:** Pomodoro timer on the dashboard ([#6](https://github.com/felipecatzkocourek/focusguard/issues/6))
 - **Backlog:** a custom "you're in Work mode" page, an app icon
 
