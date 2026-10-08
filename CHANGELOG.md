@@ -35,5 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   permissions survive rebuilds; `build-app.sh` uses it when present.
 - Diagnostics in the unified log for sessions, hosts and Firefox session parsing.
 
+- Restart Firefox automatically when blocking starts (only when it restores its tabs;
+  otherwise ask), with a toggle in Settings.
+
 ### Fixed
 - Firefox ignoring block changes until restarted (#16).

@@ -161,6 +161,12 @@ final class AppModel {
         save()
     }
 
+    func setRestartsFirefoxAutomatically(_ enabled: Bool) {
+        guard !isLocked else { return }
+        configuration.restartsFirefoxAutomatically = enabled
+        save()
+    }
+
     func setLaunchesAtLogin(_ enabled: Bool) {
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
@@ -261,7 +267,13 @@ final class AppModel {
         case .unknown: hostnames = []
         }
         Log.browsers.notice("Asking to restart Firefox (open blocked: \(hostnames.sorted(), privacy: .public))")
-        let prompt = FirefoxRestartPrompt(hostnames: hostnames, restoresTabs: BrowserTabs.firefoxRestoresSession)
+        let restoresTabs = BrowserTabs.firefoxRestoresSession
+        if configuration.restartsFirefoxAutomatically && restoresTabs {
+            Log.browsers.notice("Restarting Firefox automatically")
+            await restartFirefox()
+            return
+        }
+        let prompt = FirefoxRestartPrompt(hostnames: hostnames, restoresTabs: restoresTabs)
         firefoxRestartPrompt = prompt
         onFirefoxNeedsRestart?(prompt)
     }

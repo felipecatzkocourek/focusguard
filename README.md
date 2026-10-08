@@ -31,8 +31,8 @@ after waiting out a short countdown and writing down why.
   it blocks at the DNS level through `/etc/hosts`, including IPv6 and `www.`/`m.` variants.
 - **Already-open tabs too:** when a site gets blocked, FocusGuard closes its tabs in
   Safari and Chrome. Firefox can't close single tabs for other apps, so whenever blocking
-  starts with Firefox open, FocusGuard offers to restart it (tabs are restored, and blocked
-  ones stay blocked).
+  starts with Firefox open, FocusGuard restarts it automatically (tabs are restored, and
+  blocked ones stay blocked). If Firefox isn't set to reopen previous tabs, it asks first.
 - **Dashboard for a second monitor:** big status, time in Work today, live per-site state
   and a log of the day. It remembers which screen it lives on.
 - **Friction, not a hard wall:** temporarily allow one site for 5, 15 or 30 minutes after a

@@ -104,7 +104,7 @@ struct SetupView: View {
                     Text("When blocking starts, tabs that already have a blocked site open keep working for a while. FocusGuard closes them:")
                     VStack(alignment: .leading, spacing: 6) {
                         Text("• **Safari and Chrome:** the first time, macOS asks whether FocusGuard may control the browser. Click **Allow**. You can change this later in Privacy & Security → Automation.")
-                        Text("• **Firefox:** it can't close single tabs for other apps, so FocusGuard asks to restart it. Your tabs come back, and the blocked ones stay blocked.")
+                        Text("• **Firefox:** it can't close single tabs for other apps, so FocusGuard restarts it when blocking starts. Your tabs come back, and the blocked ones stay blocked. It only does this automatically when Firefox reopens previous windows and tabs; otherwise it asks.")
                     }
                     .font(.callout)
                 }
