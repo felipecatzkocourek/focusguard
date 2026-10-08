@@ -214,11 +214,64 @@ final class AppModel {
             try await helper.block(planned)
             lastFailure = nil
             lastError = nil
+            await clearOpenTabs(of: Set(planned).subtracting(current ?? []))
         } catch {
             lastFailure = (planned, now)
             lastError = error.localizedDescription
             if case HelperClient.Failure.notInstalled = error { helperStatus = .notInstalled }
         }
+    }
+
+    // MARK: - Browsers
+
+    /// Hostnames blocked just now that are still open in Firefox, waiting for the user to
+    /// decide whether to restart it. `nil` when there's nothing to ask about.
+    private(set) var firefoxRestartPrompt: FirefoxRestartPrompt?
+    private(set) var firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
+
+    struct FirefoxRestartPrompt: Equatable {
+        var hostnames: Set<String>
+        var restoresTabs: Bool
+    }
+
+    /// Called when Firefox has tabs on sites that were just blocked.
+    @ObservationIgnored var onFirefoxNeedsRestart: ((FirefoxRestartPrompt) -> Void)?
+
+    /// Newly blocked sites may already be open; DNS blocking alone won't stop those tabs.
+    private func clearOpenTabs(of newlyBlocked: Set<String>) async {
+        guard !newlyBlocked.isEmpty else { return }
+        await BrowserTabs.closeTabs(showing: newlyBlocked)
+
+        let inFirefox = await Task.detached { BrowserTabs.firefoxTabs(showing: newlyBlocked) }.value
+        guard !inFirefox.isEmpty else { return }
+        let prompt = FirefoxRestartPrompt(hostnames: inFirefox, restoresTabs: BrowserTabs.firefoxRestoresSession)
+        firefoxRestartPrompt = prompt
+        onFirefoxNeedsRestart?(prompt)
+    }
+
+    func restartFirefox() async {
+        firefoxRestartPrompt = nil
+        await BrowserTabs.restartFirefox()
+    }
+
+    func dismissFirefoxRestart() {
+        firefoxRestartPrompt = nil
+    }
+
+    func installFirefoxPolicy() async {
+        do {
+            try await helper.installFirefoxPolicy()
+            lastError = nil
+        } catch HelperClient.Failure.installCancelled {
+            // The user closed the password prompt.
+        } catch {
+            lastError = error.localizedDescription
+        }
+        firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
+    }
+
+    func refreshFirefoxPolicyStatus() {
+        firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
     }
 
     private func save() {

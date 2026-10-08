@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.dashboard = dashboard
         statusItem = StatusItemController(model: model) { [weak self] in self?.dashboard?.show(activate: true) }
         model.onSessionStarted = { [weak self] in self?.dashboard?.show(activate: false) }
+        model.onFirefoxNeedsRestart = { [weak self] prompt in self?.askToRestartFirefox(prompt) }
 
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake), name: NSWorkspace.didWakeNotification, object: nil
@@ -48,6 +49,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model.prepareForTermination()
+    }
+
+    /// Firefox can't close individual tabs on request, so offer to restart it: tabs on
+    /// blocked sites then reload and hit the block.
+    private func askToRestartFirefox(_ prompt: AppModel.FirefoxRestartPrompt) {
+        let sites = ListFormatter.localizedString(byJoining: prompt.hostnames.sorted())
+        let alert = NSAlert()
+        alert.messageText = "Restart Firefox to block \(sites)?"
+        alert.informativeText = prompt.restoresTabs
+            ? "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects. Firefox will reopen your windows and tabs after restarting."
+            : "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects.\n\nFirefox isn't set to reopen previous windows and tabs, so restarting will close all of them. (Firefox Settings → General → Startup → Open previous windows and tabs.)"
+        alert.addButton(withTitle: "Restart Firefox")
+        alert.addButton(withTitle: "Not Now")
+        alert.alertStyle = prompt.restoresTabs ? .informational : .warning
+
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task { await model.restartFirefox() }
+        } else {
+            model.dismissFirefoxRestart()
+        }
     }
 
     @objc private func systemDidWake() {

@@ -6,6 +6,7 @@ import SwiftUI
 struct SetupView: View {
     @Environment(AppModel.self) private var model
     @State private var installing = false
+    @State private var installingFirefoxPolicy = false
 
     private static let fullDiskAccessSettings =
         URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
@@ -66,7 +67,44 @@ struct SetupView: View {
                          : "Blocking starts with: **\(ListFormatter.localizedString(byJoining: model.triggerModeNames))**. Change this in Settings.")
                 }
 
-                step(4, "Put this window where it helps", done: false) {
+                if BrowserTabs.isFirefoxInstalled {
+                    step(4, "Make Firefox react instantly", done: model.firefoxPolicyInstalled) {
+                        Text("Firefox keeps its own address cache, so on its own it notices blocking (and unblocking) only after a minute or more, or after a restart. A Firefox policy turns that cache off. Firefox will say it's *managed by your organization* because of it.")
+                        HStack {
+                            if model.firefoxPolicyInstalled {
+                                Label("Installed", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                            } else {
+                                Button(installingFirefoxPolicy ? "Installing…" : "Install Firefox Policy…") {
+                                    installingFirefoxPolicy = true
+                                    Task {
+                                        await model.installFirefoxPolicy()
+                                        installingFirefoxPolicy = false
+                                    }
+                                }
+                                .disabled(installingFirefoxPolicy)
+                            }
+                            Button("Check Again") { model.refreshFirefoxPolicyStatus() }
+                                .buttonStyle(.link)
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Then, in Firefox:")
+                            Text("1. **Settings → General → Startup**: turn on **Open previous windows and tabs**, so FocusGuard can restart Firefox without losing your tabs.")
+                            Text("2. Quit Firefox completely (**⌘Q**) and open it again once, so the policy takes effect.")
+                        }
+                        .font(.callout)
+                    }
+                }
+
+                step(BrowserTabs.isFirefoxInstalled ? 5 : 4, "Let FocusGuard close blocked tabs", done: false) {
+                    Text("When blocking starts, tabs that already have a blocked site open keep working for a while. FocusGuard closes them:")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("• **Safari and Chrome:** the first time, macOS asks whether FocusGuard may control the browser. Click **Allow**. You can change this later in Privacy & Security → Automation.")
+                        Text("• **Firefox:** it can't close single tabs for other apps, so FocusGuard asks to restart it. Your tabs come back, and the blocked ones stay blocked.")
+                    }
+                    .font(.callout)
+                }
+
+                step(BrowserTabs.isFirefoxInstalled ? 6 : 5, "Put this window where it helps", done: false) {
                     Text("Drag this window to your second monitor. FocusGuard remembers where it was and comes forward there whenever blocking starts. Turn on **Open FocusGuard when I log in** in Settings so it's always watching.")
                 }
             }

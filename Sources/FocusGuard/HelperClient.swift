@@ -47,11 +47,23 @@ struct HelperClient: Sendable {
 
     /// Runs the bundled `install.sh` through the standard macOS administrator prompt.
     func install() async throws {
-        guard let script = Bundle.main.url(forResource: "install", withExtension: "sh"),
-              let binary = Bundle.main.url(forResource: "focusguard-helper", withExtension: nil)
-        else { throw Failure.bundleResourcesMissing }
+        guard let binary = Bundle.main.url(forResource: "focusguard-helper", withExtension: nil) else {
+            throw Failure.bundleResourcesMissing
+        }
+        try await runBundledScriptAsAdmin("install", arguments: [binary.path(), NSUserName()])
+    }
 
-        let shellCommand = [script.path(), binary.path(), NSUserName()].map(Self.shellQuoted).joined(separator: " ")
+    /// Installs the Firefox policy that turns off Firefox's own DNS cache.
+    func installFirefoxPolicy() async throws {
+        try await runBundledScriptAsAdmin("firefox-policy", arguments: ["install"])
+    }
+
+    /// Runs `<name>.sh` from the app bundle as root via the standard admin prompt.
+    private func runBundledScriptAsAdmin(_ name: String, arguments: [String]) async throws {
+        guard let script = Bundle.main.url(forResource: name, withExtension: "sh") else {
+            throw Failure.bundleResourcesMissing
+        }
+        let shellCommand = ([script.path()] + arguments).map(Self.shellQuoted).joined(separator: " ")
         let appleScript = "do shell script \"\(Self.appleScriptEscaped(shellCommand))\" with administrator privileges"
 
         do {
