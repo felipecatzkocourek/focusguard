@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-08
+
 ### Added
 - Core library: domain normalization/validation, `/etc/hosts` section editing, block
   planning, activity log, JSON persistence.
@@ -40,3 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Firefox ignoring block changes until restarted (#16).
+
+[Unreleased]: https://github.com/felipecatzkocourek/focusguard/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/felipecatzkocourek/focusguard/releases/tag/v0.1.0
