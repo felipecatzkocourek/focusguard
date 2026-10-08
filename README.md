@@ -29,6 +29,9 @@ after waiting out a short countdown and writing down why.
   session, the block is restored within seconds.
 - **System-wide blocking:** works in every browser (Safari, Chrome, Firefox, Arc…) because
   it blocks at the DNS level through `/etc/hosts`, including IPv6 and `www.`/`m.` variants.
+- **Already-open tabs too:** when a site gets blocked, FocusGuard closes its tabs in
+  Safari and Chrome. Firefox can't close single tabs for other apps, so FocusGuard offers
+  to restart it instead (tabs are restored, and blocked ones stay blocked).
 - **Dashboard for a second monitor:** big status, time in Work today, live per-site state
   and a log of the day. It remembers which screen it lives on.
 - **Friction, not a hard wall:** temporarily allow one site for 5, 15 or 30 minutes after a
@@ -73,11 +76,12 @@ Sources/
     BlockState.swift    Work state, temporary allowances, BlockPlanner
     ActivityLog.swift   events + "time in Work today"
     FocusDatabase.swift parse the macOS Focus database (active mode, mode names)
+    FirefoxSession.swift decode Firefox's mozLz4 session file, list open tab URLs
     JSONStore.swift     persistence in ~/Library/Application Support/FocusGuard
   FocusGuardHelper/   Root CLI: block <hosts…> | clear | status
   FocusGuard/         AppKit + SwiftUI app (Focus monitor, dashboard, menu bar)
 Tests/FocusGuardCoreTests/
-helper/               install.sh / uninstall.sh for the privileged helper
+helper/               install.sh / uninstall.sh / firefox-policy.sh (run as root)
 scripts/              build-app.sh, test.sh
 ```
 
@@ -103,7 +107,12 @@ Then follow the **Setup** tab in the app:
 2. **Grant Full Disk Access.** System Settings → Privacy & Security → Full Disk Access →
    **+** → FocusGuard. The Setup tab shows the detected Focus once it works.
 3. **Pick your trigger modes** in Settings (Work by default).
-4. **Drag the window to your second monitor** and turn on *Open FocusGuard when I log in*.
+4. **Firefox users:** click *Install Firefox Policy…* (admin password). In Firefox, turn on
+   *Settings → General → Startup → Open previous windows and tabs*, then quit Firefox with
+   ⌘Q and reopen it once.
+5. **Safari/Chrome users:** the first time a blocked tab is open when blocking starts,
+   macOS asks whether FocusGuard may control the browser. Click **Allow**.
+6. **Drag the window to your second monitor** and turn on *Open FocusGuard when I log in*.
 
 ### Uninstall
 
@@ -112,8 +121,8 @@ sudo ~/Applications/FocusGuard.app/Contents/Resources/uninstall.sh
 rm -rf ~/Applications/FocusGuard.app ~/Library/Application\ Support/FocusGuard
 ```
 
-`uninstall.sh` removes the helper and its sudoers rule and clears FocusGuard's section of
-`/etc/hosts`, so nothing stays blocked.
+`uninstall.sh` removes the helper, its sudoers rule and the Firefox policy, and clears
+FocusGuard's section of `/etc/hosts`, so nothing stays blocked.
 
 ## Security
 
@@ -125,7 +134,9 @@ rights. FocusGuard keeps the privileged part as small and auditable as possible:
 | What runs as root | Only `focusguard-helper` (~120 lines). The app itself never runs as root. |
 | Who can replace the helper | It's installed in `/Library/PrivilegedHelperTools`, owned by `root:wheel`, mode `755`. A normal user can't modify it. |
 | Password-less sudo scope | `/etc/sudoers.d/focusguard` allows **only that one binary** for **only your user**. The rule is checked with `visudo -cf` before it's installed. |
-| Full Disk Access | Used only to read the two Focus database files. The app never writes there. |
+| Full Disk Access | Used only to read the Focus database and Firefox's saved session (to find open tabs). The app never writes there. |
+| Firefox policy | Optional. Only sets `network.dnsCacheExpiration` and its grace period to 0 in `/Library/Preferences/org.mozilla.firefox.plist`; other policies are kept, and `uninstall.sh` removes it. |
+| Browser control | Only Safari and Chrome, only when running, only to close tabs of blocked sites. macOS asks for permission per browser. |
 | Injection into `/etc/hosts` | Every argument must pass a strict RFC 1123 hostname check. Newlines, spaces, IPs and anything else are rejected before the file is touched. |
 | Damaging the hosts file | Only lines between `# BEGIN FocusGuard` and `# END FocusGuard` are ever rewritten. Writes are atomic (temp file + `rename`), so a crash can't leave a half-written file. |
 
@@ -136,9 +147,12 @@ The worst a compromised user account can do with the helper is block or unblock 
 - **This is a commitment device, not parental controls.** An admin user can always undo
   it (edit `/etc/hosts`, uninstall the helper). The point is to break the reflex, not to
   be unbreakable.
-- **Browsers cache DNS.** A tab that's already open may keep working for up to about a
-  minute after blocking starts. The helper flushes the system cache, but Chrome keeps its
-  own.
+- **Browsers cache DNS.** Safari uses the system cache, which the helper flushes. For
+  Firefox, the optional policy turns its own cache off. Chrome keeps a short (~1 min) cache
+  of its own; FocusGuard closes Chrome tabs of blocked sites, but a brand-new Chrome tab can
+  still load a just-blocked site for up to a minute.
+- **Firefox tab detection** uses Firefox's saved session, which is written about every
+  15 s, so a tab opened seconds before blocking starts may be missed.
 - **No wildcard subdomains.** `/etc/hosts` can't express `*.youtube.com`; FocusGuard
   blocks the bare domain plus `www.` and `m.`.
 - **DNS-over-HTTPS** set to a custom provider in a browser can bypass `/etc/hosts`.

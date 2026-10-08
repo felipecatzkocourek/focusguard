@@ -22,3 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/build-app.sh` to package `FocusGuard.app`; `scripts/test.sh` that works with only
   the Command Line Tools.
 - CI on GitHub Actions; PR and issue templates.
+- Close open tabs of newly blocked sites in Safari and Chrome; offer to restart Firefox when
+  its saved session shows a blocked site open.
+- Optional Firefox policy that disables Firefox's DNS cache, so blocking and unblocking
+  take effect immediately (installed from Setup, removed by `uninstall.sh`).
+
+### Fixed
+- Firefox ignoring block changes until restarted (#16).
