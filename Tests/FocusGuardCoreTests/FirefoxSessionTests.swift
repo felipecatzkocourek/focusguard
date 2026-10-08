@@ -58,6 +58,11 @@ struct FirefoxSessionTests {
         ])
     }
 
+    @Test func countsOpenWindows() {
+        #expect(FirefoxSession.openWindowCount(sessionJSON: session) == 2)
+        #expect(FirefoxSession.openWindowCount(sessionJSON: Data(#"{"windows": [], "_closedWindows": [{}]}"#.utf8)) == 0)
+    }
+
     @Test func findsOpenBlockedHosts() throws {
         let urls = try FirefoxSession.openTabURLs(sessionJSON: session)
         let blocked = Set(Domain.hostnames(for: "youtube.com") + Domain.hostnames(for: "instagram.com"))

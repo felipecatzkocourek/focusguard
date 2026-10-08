@@ -240,6 +240,7 @@ final class AppModel {
     private(set) var firefoxPolicyInstalled = BrowserTabs.isFirefoxPolicyInstalled
 
     struct FirefoxRestartPrompt: Equatable {
+        /// Blocked hostnames seen in Firefox's tabs; empty when they couldn't be checked.
         var hostnames: Set<String>
         var restoresTabs: Bool
     }
@@ -252,10 +253,15 @@ final class AppModel {
         guard !newlyBlocked.isEmpty else { return }
         await BrowserTabs.closeTabs(showing: newlyBlocked)
 
-        let inFirefox = await Task.detached { BrowserTabs.firefoxTabs(showing: newlyBlocked) }.value
-        guard !inFirefox.isEmpty else { return }
-        Log.browsers.notice("Asking to restart Firefox for \(inFirefox.sorted(), privacy: .public)")
-        let prompt = FirefoxRestartPrompt(hostnames: inFirefox, restoresTabs: BrowserTabs.firefoxRestoresSession)
+        let check = await Task.detached { BrowserTabs.firefoxTabs(showing: newlyBlocked) }.value
+        let hostnames: Set<String>
+        switch check {
+        case .clear: return
+        case .open(let open): hostnames = open
+        case .unknown: hostnames = []
+        }
+        Log.browsers.notice("Asking to restart Firefox (open blocked: \(hostnames.sorted(), privacy: .public))")
+        let prompt = FirefoxRestartPrompt(hostnames: hostnames, restoresTabs: BrowserTabs.firefoxRestoresSession)
         firefoxRestartPrompt = prompt
         onFirefoxNeedsRestart?(prompt)
     }

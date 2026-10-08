@@ -76,31 +76,77 @@ enum BrowserTabs {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: firefoxBundleIdentifier) != nil
     }
 
-    /// Blocked hostnames currently open in Firefox, from its most recently saved session.
+    enum FirefoxTabCheck: Equatable {
+        /// Firefox isn't running, or none of its tabs shows a blocked site.
+        case clear
+        /// These blocked hostnames are open in Firefox.
+        case open(Set<String>)
+        /// Firefox has windows on screen that its saved session doesn't describe, so we
+        /// can't tell what's open.
+        case unknown
+    }
+
+    /// Checks Firefox's most recently saved session for tabs showing `hostnames`.
     /// Firefox saves every ~15 s, so a tab opened just now may not be listed yet.
-    static func firefoxTabs(showing hostnames: Set<String>) -> Set<String> {
+    static func firefoxTabs(showing hostnames: Set<String>) -> FirefoxTabCheck {
         guard isFirefoxRunning else {
             Log.browsers.notice("Firefox not running; nothing to check")
-            return []
+            return .clear
         }
+        let visibleWindows = firefoxVisibleWindowCount
         guard let file = newestFirefoxProfileFile("sessionstore-backups/recovery.jsonlz4") else {
             Log.browsers.error("No Firefox session file found (profiles unreadable or missing)")
-            return []
+            return visibleWindows > 0 ? .unknown : .clear
         }
         do {
             let data = try Data(contentsOf: file)
             let json = try FirefoxSession.decompressMozLz4(data)
             let urls = try FirefoxSession.openTabURLs(sessionJSON: json)
             let open = FirefoxSession.openBlockedHostnames(in: urls, blocked: hostnames)
-            Log.browsers.notice("Firefox session \(file.path(), privacy: .public): \(data.count) bytes, \(urls.count) tabs, blocked open: \(open.sorted(), privacy: .public)")
-            if open.isEmpty {
-                Log.browsers.notice("Firefox session shape: \(FirefoxSession.summary(sessionJSON: json), privacy: .public)")
-            }
-            return open
+            let sessionWindows = FirefoxSession.openWindowCount(sessionJSON: json)
+            Log.browsers.notice("Firefox session \(file.path(), privacy: .public): \(data.count) bytes, \(sessionWindows) windows, \(urls.count) tabs, \(visibleWindows) visible windows, blocked open: \(open.sorted(), privacy: .public)")
+            if !open.isEmpty { return .open(open) }
+
+            Log.browsers.notice("Firefox session shape: \(FirefoxSession.summary(sessionJSON: json), privacy: .public)")
+            Log.browsers.notice("Firefox session files: \(firefoxSessionFilesDescription, privacy: .public)")
+            return sessionWindows == 0 && visibleWindows > 0 ? .unknown : .clear
         } catch {
             Log.browsers.error("Reading Firefox session \(file.path(), privacy: .public) failed: \(String(describing: error), privacy: .public)")
-            return []
+            return visibleWindows > 0 ? .unknown : .clear
         }
+    }
+
+    /// Normal-sized Firefox windows currently on screen. Reading window geometry doesn't
+    /// need any permission (titles would).
+    static var firefoxVisibleWindowCount: Int {
+        let pids = Set(NSRunningApplication.runningApplications(withBundleIdentifier: firefoxBundleIdentifier).map(\.processIdentifier))
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return 0
+        }
+        return windows.filter { window in
+            guard let pid = window[kCGWindowOwnerPID as String] as? pid_t, pids.contains(pid),
+                  window[kCGWindowLayer as String] as? Int == 0,
+                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                  let width = bounds["Width"] as? Double, let height = bounds["Height"] as? Double
+            else { return false }
+            return width >= 200 && height >= 200
+        }.count
+    }
+
+    /// Every profile's session files with their size and age, for diagnostics.
+    private static var firefoxSessionFilesDescription: String {
+        let profiles = FileManager.default.homeDirectoryForCurrentUser
+            .appending(path: "Library/Application Support/Firefox/Profiles", directoryHint: .isDirectory)
+        let names = ["sessionstore-backups/recovery.jsonlz4", "sessionstore-backups/recovery.baklz4", "sessionstore.jsonlz4"]
+        let entries = (try? FileManager.default.contentsOfDirectory(at: profiles, includingPropertiesForKeys: nil)) ?? []
+        return entries.flatMap { profile in
+            names.compactMap { name -> String? in
+                let url = profile.appending(path: name)
+                guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+                      let date = values.contentModificationDate else { return nil }
+                return "\(profile.lastPathComponent)/\(name) \(values.fileSize ?? 0)B \(Int(-date.timeIntervalSinceNow))s ago"
+            }
+        }.joined(separator: "; ")
     }
 
     /// Whether Firefox reopens previous windows and tabs on launch, so a restart is harmless.

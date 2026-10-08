@@ -56,6 +56,12 @@ public enum FirefoxSession {
         return urls
     }
 
+    /// How many open (not closed) windows the session lists.
+    public static func openWindowCount(sessionJSON data: Data) -> Int {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return 0 }
+        return (root["windows"] as? [Any])?.count ?? 0
+    }
+
     /// A short description of the session's shape (windows, tabs and the host shown in
     /// each), used in diagnostics when tab detection doesn't find what's expected.
     public static func summary(sessionJSON data: Data) -> String {
@@ -75,7 +81,8 @@ public enum FirefoxSession {
         }
         let windows = (root["windows"] as? [[String: Any]]) ?? []
         let closed = (root["_closedWindows"] as? [[String: Any]]) ?? []
-        return "keys: \(root.keys.sorted().joined(separator: ",")); windows: \(describe(windows)); closed windows: \(closed.count)"
+        let selected = root["selectedWindow"].map { "\($0)" } ?? "none"
+        return "keys: \(root.keys.sorted().joined(separator: ",")); selectedWindow: \(selected); windows: \(describe(windows)); closed windows: \(describe(closed))"
     }
 
     /// Hostnames from `blocked` that are open in at least one tab.

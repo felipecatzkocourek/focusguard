@@ -55,11 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// blocked sites then reload and hit the block.
     private func askToRestartFirefox(_ prompt: AppModel.FirefoxRestartPrompt) {
         let sites = ListFormatter.localizedString(byJoining: prompt.hostnames.sorted())
+        let situation = prompt.hostnames.isEmpty
+            ? "FocusGuard couldn't check which sites Firefox has open. Tabs that were already open on a blocked site keep working until Firefox reconnects."
+            : "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects."
         let alert = NSAlert()
-        alert.messageText = "Restart Firefox to block \(sites)?"
+        alert.messageText = prompt.hostnames.isEmpty ? "Restart Firefox to apply the block?" : "Restart Firefox to block \(sites)?"
         alert.informativeText = prompt.restoresTabs
-            ? "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects. Firefox will reopen your windows and tabs after restarting."
-            : "Firefox still has \(sites) open, and open tabs keep working until Firefox reconnects.\n\nFirefox isn't set to reopen previous windows and tabs, so restarting will close all of them. (Firefox Settings → General → Startup → Open previous windows and tabs.)"
+            ? situation + " Firefox will reopen your windows and tabs after restarting."
+            : situation + "\n\nFirefox isn't set to reopen previous windows and tabs, so restarting will close all of them. (Firefox Settings → General → Startup → Open previous windows and tabs.)"
         alert.addButton(withTitle: "Restart Firefox")
         alert.addButton(withTitle: "Not Now")
         alert.alertStyle = prompt.restoresTabs ? .informational : .warning
