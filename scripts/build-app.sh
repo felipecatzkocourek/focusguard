@@ -22,7 +22,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/FocusGuard" "$APP/Contents/MacOS/FocusGuard"
 cp "$BIN/focusguard-helper" "$APP/Contents/Resources/focusguard-helper"
-cp helper/install.sh helper/uninstall.sh "$APP/Contents/Resources/"
+cp helper/install.sh helper/uninstall.sh helper/firefox-policy.sh "$APP/Contents/Resources/"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD_NUMBER/" Resources/Info.plist >"$APP/Contents/Info.plist"
 
 echo "→ Signing (ad-hoc)…"
