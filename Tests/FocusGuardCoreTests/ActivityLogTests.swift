@@ -65,6 +65,12 @@ struct ActivityLogTests {
         #expect(decoded.events(on: date(12), calendar: calendar).count == 5)
     }
 
+    @Test func anEndedActiveKnowsItsOvertime() {
+        #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1680).overtime == 180)
+        #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1500).overtime == 0)
+        #expect(ActivityEvent.Kind.breakEnded(planned: 300, actual: 360).overtime == 0)
+    }
+
     @Test func logsWrittenBeforeThePomodoroStillDecode() throws {
         let json = """
         {"events":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","date":800000000,

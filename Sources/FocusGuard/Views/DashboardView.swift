@@ -260,8 +260,8 @@ private struct ActivityRow: View {
         case .cycleStarted(let plan):
             "Cycle started · \(plan.summary)"
         case .activeEnded(let planned, let actual):
-            actual > planned
-                ? "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(actual - planned)) Overtime)"
+            event.kind.overtime > 0
+                ? "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(event.kind.overtime)) Overtime)"
                 : "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
         case .breakEnded(let planned, let actual):
             actual < planned

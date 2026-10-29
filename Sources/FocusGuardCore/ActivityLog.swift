@@ -12,6 +12,13 @@ public struct ActivityEvent: Codable, Equatable, Sendable, Identifiable {
         case breakEnded(planned: TimeInterval, actual: TimeInterval)
         case idle(duration: TimeInterval)
         case cycleEnded(PomodoroCycle.Ending)
+
+        /// How long an ended Active ran past its planned length; zero for other kinds.
+        /// Derived rather than stored, so it can't drift from the two lengths.
+        public var overtime: TimeInterval {
+            guard case .activeEnded(let planned, let actual) = self else { return 0 }
+            return max(actual - planned, 0)
+        }
     }
 
     public var id: UUID
