@@ -258,7 +258,7 @@ private struct ActivityRow: View {
             reason.isEmpty ? "Allowed \(domain) for \(minutes) min" : "Allowed \(domain) for \(minutes) min: “\(reason)”"
         case .allowanceExpired(let domain): "\(domain) blocked again"
         case .cycleStarted(let plan):
-            "Pomodoro started · \(plan.actives) × \(plan.activeMinutes) min, Breaks of \(plan.breakMinutes)"
+            "Cycle started · \(plan.summary)"
         case .activeEnded(let planned, let actual):
             actual > planned
                 ? "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(actual - planned)) Overtime)"
@@ -268,8 +268,8 @@ private struct ActivityRow: View {
                 ? "Break cut short · \(formatMinutes(actual)) of \(formatMinutes(planned))"
                 : "Break ended · \(formatMinutes(actual))"
         case .idle(let duration): "Idle · \(formatMinutes(duration))"
-        case .cycleEnded(.completed): "Pomodoro completed"
-        case .cycleEnded(.stopped): "Pomodoro stopped"
+        case .cycleEnded(.completed): "Cycle completed"
+        case .cycleEnded(.stopped): "Cycle stopped"
         }
     }
 }
@@ -299,6 +299,11 @@ struct StatusPill: View {
 func formatDuration(_ interval: TimeInterval) -> String {
     let minutes = Int(interval) / 60
     return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+}
+
+extension Plan {
+    /// "4 × 25 min, Breaks of 5", for the Plan editor and the activity log.
+    var summary: String { "\(actives) × \(activeMinutes) min, Breaks of \(breakMinutes)" }
 }
 
 /// Rounded to whole minutes, for log entries ("27 min", "<1 min").

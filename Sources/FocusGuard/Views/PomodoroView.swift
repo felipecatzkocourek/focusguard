@@ -36,7 +36,7 @@ private struct PlanEditor: View {
                 .padding(4)
             }
             if let plan {
-                Text("\(plan.actives) × \(plan.activeMinutes) min, Breaks of \(plan.breakMinutes) → ends in \(formatDuration(plan.totalLength))")
+                Text("\(plan.summary) → ends in \(formatDuration(plan.totalLength))")
                     .foregroundStyle(.secondary)
             }
             Button {
