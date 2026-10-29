@@ -52,7 +52,7 @@ struct ActivityLogTests {
         #expect(log.events(on: date(12), calendar: calendar).count == 1)
     }
 
-    @Test func pomodoroEventsSurviveSavingAndLoading() throws {
+    @Test func cycleEventsSurviveSavingAndLoading() throws {
         var log = ActivityLog()
         log.record(.cycleStarted(plan: Plan(activeMinutes: 25, breakMinutes: 5, actives: 4)!), at: date(9))
         log.record(.activeEnded(planned: 1500, actual: 1680), at: date(9, 28))
@@ -71,7 +71,7 @@ struct ActivityLogTests {
         #expect(ActivityEvent.Kind.breakEnded(planned: 300, actual: 360).overtime == 0)
     }
 
-    @Test func logsWrittenBeforeThePomodoroStillDecode() throws {
+    @Test func logsWrittenBeforeCycleEventsStillDecode() throws {
         let json = """
         {"events":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","date":800000000,
         "kind":{"allowanceGranted":{"domain":"youtube.com","reason":"tutorial","minutes":15}}}]}

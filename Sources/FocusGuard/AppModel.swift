@@ -36,7 +36,7 @@ final class AppModel {
     @ObservationIgnored private let logStore: JSONStore<ActivityLog>
     @ObservationIgnored private var pollTimer: Timer?
     /// Fires when the current Break runs out, so Idle starts on time instead of at the next poll.
-    @ObservationIgnored private var pomodoroTimer: Timer?
+    @ObservationIgnored private var cycleTimer: Timer?
     @ObservationIgnored private var isApplying = false
     @ObservationIgnored private var lastFailure: (hostnames: [String], date: Date)?
 
@@ -79,7 +79,7 @@ final class AppModel {
     /// site unblocked past its time. Blocking itself stays in place.
     func prepareForTermination() {
         pollTimer?.invalidate()
-        pomodoroTimer?.invalidate()
+        cycleTimer?.invalidate()
         guard state.isBlocking, !state.allowances.isEmpty else { return }
         state.allowances.removeAll()
         save()
@@ -139,7 +139,7 @@ final class AppModel {
         } catch {
             // The UI only offers inputs the current state accepts; a race with the Break
             // running out is harmless, so just note it.
-            Log.session.notice("Pomodoro input \(String(describing: input), privacy: .public) rejected: \(String(describing: error), privacy: .public)")
+            Log.session.notice("Cycle input \(String(describing: input), privacy: .public) rejected: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -153,14 +153,14 @@ final class AppModel {
         }
         save()
 
-        pomodoroTimer?.invalidate()
-        pomodoroTimer = nil
+        cycleTimer?.invalidate()
+        cycleTimer = nil
         if let deadline = cycle?.nextDeadline {
             let timer = Timer(fire: deadline, interval: 0, repeats: false) { [weak self] _ in
                 Task { @MainActor in self?.handle(.tick) }
             }
             RunLoop.main.add(timer, forMode: .common)
-            pomodoroTimer = timer
+            cycleTimer = timer
         }
     }
 
