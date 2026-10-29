@@ -89,10 +89,12 @@ private struct RunningCycleView: View {
     }
 
     private func timer(at now: Date) -> String {
+        // Countdowns round up so 0:00 means done; Overtime and Idle count up, so they round
+        // down and don't show a second that hasn't passed yet.
         let overtime = cycle.overtime(at: now)
-        if overtime > 0 { return "+" + formatCountdown(overtime) }
+        if overtime > 0 { return "+" + formatCountdown(overtime.rounded(.down)) }
         if let remaining = cycle.remaining(at: now) { return formatCountdown(remaining) }
-        return formatCountdown(now.timeIntervalSince(cycle.stateStart))
+        return formatCountdown(now.timeIntervalSince(cycle.stateStart).rounded(.down))
     }
 
     @ViewBuilder private func mainButton(at now: Date) -> some View {
