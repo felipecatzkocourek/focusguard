@@ -135,7 +135,7 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
             break
         case .startActive:
             guard next.state == .idle else { throw .notAllowed }
-            effects.append(.record(.idle(duration: now.timeIntervalSince(next.stateStart)), at: now))
+            effects += next.idleEnded(at: now)
             next.state = .active
             next.stateStart = now
             next.activeNumber += 1
@@ -149,14 +149,13 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
             next.state = .break
             next.stateStart = now
         case .stop:
-            let elapsed = now.timeIntervalSince(next.stateStart)
             switch next.state {
             case .active:
                 effects.append(try next.activeEnded(at: now))
             case .break:
-                effects.append(.record(.breakEnded(planned: plan.breakLength, actual: elapsed), at: now))
+                effects.append(.record(.breakEnded(planned: plan.breakLength, actual: now.timeIntervalSince(next.stateStart)), at: now))
             case .idle:
-                effects.append(.record(.idle(duration: elapsed), at: now))
+                effects += next.idleEnded(at: now)
             }
             effects.append(.record(.cycleEnded(.stopped), at: now))
             return Transition(cycle: nil, effects: effects)
@@ -169,6 +168,13 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     private func activeEnded(at now: Date) throws(Rejection) -> Effect {
         guard reachedPlannedLength(at: now) else { throw .reasonRequired }
         return .record(.activeEnded(planned: plan.activeLength, actual: now.timeIntervalSince(stateStart)), at: now)
+    }
+
+    /// The log entry for leaving Idle now, if any time was spent in it: starting the next
+    /// Active the moment the Break ends is not an Idle.
+    private func idleEnded(at now: Date) -> [Effect] {
+        let duration = now.timeIntervalSince(stateStart)
+        return duration > 0 ? [.record(.idle(duration: duration), at: now)] : []
     }
 
     /// Ends a Break whose planned length has run out, as of the moment it ran out.

@@ -97,7 +97,7 @@ struct PomodoroTests {
         cycle = try #require(try apply(.endActive, 25))   // Active 1, on time
         cycle = try #require(try apply(.startActive, 32)) // Break 25–30, Idle 30–32
         cycle = try #require(try apply(.endActive, 59))   // Active 2, 2 min of Overtime
-        cycle = try #require(try apply(.startActive, 64)) // Break 59–64, no Idle
+        cycle = try #require(try apply(.startActive, 64)) // Break 59–64, no Idle to log
         #expect(cycle.activeNumber == 3)
         let ended = try apply(.endActive, 89)             // Active 3: no Break after it
 
@@ -108,7 +108,6 @@ struct PomodoroTests {
             .record(.idle(duration: minutes(2)), at: at(32)),
             .record(.activeEnded(planned: minutes(25), actual: minutes(27)), at: at(59)),
             .record(.breakEnded(planned: minutes(5), actual: minutes(5)), at: at(64)),
-            .record(.idle(duration: 0), at: at(64)),
             .record(.activeEnded(planned: minutes(25), actual: minutes(25)), at: at(89)),
             .record(.cycleEnded(.completed), at: at(89)),
         ])
