@@ -266,7 +266,7 @@ private struct ActivityRow: View {
         case .breakEnded(let planned, let actual):
             actual < planned
                 ? "Break cut short · \(formatMinutes(actual)) of \(formatMinutes(planned))"
-                : "Break ended · \(formatMinutes(actual))"
+                : "Break ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
         case .idle(let duration): "Idle · \(formatMinutes(duration))"
         case .cycleEnded(.completed): "Cycle completed"
         case .cycleEnded(.stopped): "Cycle stopped"
