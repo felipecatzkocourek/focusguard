@@ -14,7 +14,7 @@ The Pomodoro Cycle never blocks sites by itself. Without a Session it is only a 
 
 The safeguard moves to the Active: ending an Active before its planned length requires a typed reason, and every Phase (planned and actual length, Overtime, Shortfall, reason) is logged.
 
-## Rejected alternatives
+## Alternatives discarded
 
 - **Breaks keep blocking; use an Allowance if needed.** Preserves the v0.1.0 guarantee but makes Breaks pointless for the intended use (watching a video while resting).
 - **A separate list of "Break sites".** Adds configuration and a second site list for little gain over unblocking everything for a bounded time.
