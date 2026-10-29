@@ -83,7 +83,7 @@ private struct RunningCycleView: View {
     private var isLastActive: Bool { cycle.activeNumber == cycle.plan.actives }
 
     private var title: String {
-        switch cycle.phase {
+        switch cycle.state {
         case .active: "Active \(cycle.activeNumber) of \(cycle.plan.actives)"
         case .break: "Break · next: Active \(cycle.activeNumber + 1) of \(cycle.plan.actives)"
         case .idle: "Idle · next: Active \(cycle.activeNumber + 1) of \(cycle.plan.actives)"
@@ -94,23 +94,23 @@ private struct RunningCycleView: View {
         let overtime = cycle.overtime(at: now)
         if overtime > 0 { return "+" + formatCountdown(overtime) }
         if let remaining = cycle.remaining(at: now) { return formatCountdown(remaining) }
-        return formatCountdown(now.timeIntervalSince(cycle.phaseStart))
+        return formatCountdown(now.timeIntervalSince(cycle.stateStart))
     }
 
     private func reachedPlannedLength(at now: Date) -> Bool {
-        cycle.phase == .active && cycle.remaining(at: now) == 0
+        cycle.state == .active && cycle.remaining(at: now) == 0
     }
 
     /// Stop needs no Friction except during an Active before its planned length, where
     /// it isn't offered yet.
     private func canStop(at now: Date) -> Bool {
-        cycle.phase != .active || reachedPlannedLength(at: now)
+        cycle.state != .active || reachedPlannedLength(at: now)
     }
 
     @ViewBuilder private func mainButton(at now: Date) -> some View {
         if reachedPlannedLength(at: now) {
             BigButton(title: isLastActive ? "Finish Cycle" : "Start Break", action: model.endActive)
-        } else if cycle.phase == .idle {
+        } else if cycle.state == .idle {
             BigButton(title: "Start Active \(cycle.activeNumber + 1)", action: model.startActive)
         }
     }

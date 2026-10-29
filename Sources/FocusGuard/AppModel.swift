@@ -137,7 +137,7 @@ final class AppModel {
         do {
             apply(try cycle.handle(input, at: Date()))
         } catch {
-            // The UI only offers inputs the current Phase accepts; a race with the Break
+            // The UI only offers inputs the current state accepts; a race with the Break
             // running out is harmless, so just note it.
             Log.session.notice("Pomodoro input \(String(describing: input), privacy: .public) rejected: \(String(describing: error), privacy: .public)")
         }

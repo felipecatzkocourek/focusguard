@@ -14,7 +14,7 @@ struct PomodoroTests {
         let transition = PomodoroCycle.start(plan, at: t0)
 
         let cycle = try! #require(transition.cycle)
-        #expect(cycle.phase == .active)
+        #expect(cycle.state == .active)
         #expect(cycle.activeNumber == 1)
         #expect(cycle.remaining(at: at(10)) == minutes(15))
         #expect(transition.effects == [.record(.cycleStarted(plan: plan), at: t0)])
@@ -26,7 +26,7 @@ struct PomodoroTests {
         let transition = try started.handle(.tick, at: at(31))
 
         let cycle = try #require(transition.cycle)
-        #expect(cycle.phase == .active)
+        #expect(cycle.state == .active)
         #expect(cycle.remaining(at: at(31)) == 0)
         #expect(cycle.overtime(at: at(31)) == minutes(6))
         #expect(cycle.overtime(at: at(20)) == 0)
@@ -39,7 +39,7 @@ struct PomodoroTests {
         let transition = try started.handle(.endActive, at: at(28))
 
         let cycle = try #require(transition.cycle)
-        #expect(cycle.phase == .break)
+        #expect(cycle.state == .break)
         #expect(cycle.remaining(at: at(28)) == minutes(5))
         #expect(transition.effects == [
             .record(.activeEnded(planned: minutes(25), actual: minutes(28), overtime: minutes(3)), at: at(28)),
@@ -59,11 +59,11 @@ struct PomodoroTests {
         let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
 
         let stillOnBreak = try #require(try onBreak.handle(.tick, at: at(29)).cycle)
-        #expect(stillOnBreak.phase == .break)
+        #expect(stillOnBreak.state == .break)
 
         let transition = try onBreak.handle(.tick, at: at(42))
         let idle = try #require(transition.cycle)
-        #expect(idle.phase == .idle)
+        #expect(idle.state == .idle)
         #expect(idle.remaining(at: at(42)) == nil)
         #expect(transition.effects == [
             .record(.breakEnded(planned: minutes(5), actual: minutes(5)), at: at(30)),
@@ -78,7 +78,7 @@ struct PomodoroTests {
         let transition = try idle.handle(.startActive, at: at(57))
 
         let second = try #require(transition.cycle)
-        #expect(second.phase == .active)
+        #expect(second.state == .active)
         #expect(second.activeNumber == 2)
         #expect(second.remaining(at: at(57)) == minutes(25))
         #expect(transition.effects == [.record(.idle(duration: minutes(12)), at: at(57))])

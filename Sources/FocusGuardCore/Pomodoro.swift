@@ -23,7 +23,8 @@ public struct Plan: Codable, Equatable, Hashable, Sendable {
 /// input carries an explicit time and returns the next state plus the effects the app
 /// must carry out.
 public struct PomodoroCycle: Codable, Equatable, Sendable {
-    public enum Phase: Codable, Equatable, Sendable {
+    /// Where the Cycle is: in one of its Phases (an Active or a Break), or Idle between them.
+    public enum State: Codable, Equatable, Sendable {
         case active, `break`, idle
     }
 
@@ -47,19 +48,19 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     }
 
     public private(set) var plan: Plan
-    public private(set) var phase: Phase
-    public private(set) var phaseStart: Date
+    public private(set) var state: State
+    public private(set) var stateStart: Date
     /// 1-based index of the current (or, during a Break or Idle, the last) Active.
     public private(set) var activeNumber: Int
 
     public static func start(_ plan: Plan, at now: Date) -> Transition {
-        let cycle = PomodoroCycle(plan: plan, phase: .active, phaseStart: now, activeNumber: 1)
+        let cycle = PomodoroCycle(plan: plan, state: .active, stateStart: now, activeNumber: 1)
         return Transition(cycle: cycle, effects: [.record(.cycleStarted(plan: plan), at: now)])
     }
 
     /// Planned length of the current Phase; `nil` while Idle.
     public var plannedLength: TimeInterval? {
-        switch phase {
+        switch state {
         case .active: plan.activeLength
         case .break: plan.breakLength
         case .idle: nil
@@ -68,19 +69,19 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
 
     /// Time left in the current Phase, never negative; `nil` while Idle.
     public func remaining(at now: Date) -> TimeInterval? {
-        plannedLength.map { max($0 - now.timeIntervalSince(phaseStart), 0) }
+        plannedLength.map { max($0 - now.timeIntervalSince(stateStart), 0) }
     }
 
     /// How long the current Active has run past its planned length; zero in other Phases.
     public func overtime(at now: Date) -> TimeInterval {
-        guard phase == .active else { return 0 }
-        return max(now.timeIntervalSince(phaseStart) - plan.activeLength, 0)
+        guard state == .active else { return 0 }
+        return max(now.timeIntervalSince(stateStart) - plan.activeLength, 0)
     }
 
     /// When the Cycle will change on its own (the end of the current Break), so the app can
     /// schedule a tick for that moment. Actives and Idle wait for the user.
     public var nextDeadline: Date? {
-        phase == .break ? phaseStart.addingTimeInterval(plan.breakLength) : nil
+        state == .break ? stateStart.addingTimeInterval(plan.breakLength) : nil
     }
 
     // MARK: - Inputs
@@ -100,7 +101,7 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     public enum Rejection: Error, Equatable, Sendable {
         /// Ending an Active before its planned length needs a reason.
         case reasonRequired
-        /// The input doesn't apply to the current Phase.
+        /// The input doesn't apply to the current state.
         case notAllowed
     }
 
@@ -113,23 +114,23 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         case .tick:
             break
         case .startActive:
-            guard next.phase == .idle else { throw .notAllowed }
-            effects.append(.record(.idle(duration: now.timeIntervalSince(next.phaseStart)), at: now))
-            next.phase = .active
-            next.phaseStart = now
+            guard next.state == .idle else { throw .notAllowed }
+            effects.append(.record(.idle(duration: now.timeIntervalSince(next.stateStart)), at: now))
+            next.state = .active
+            next.stateStart = now
             next.activeNumber += 1
         case .endActive:
-            guard next.phase == .active else { throw .notAllowed }
+            guard next.state == .active else { throw .notAllowed }
             effects.append(try next.activeEnded(at: now))
             guard next.activeNumber < plan.actives else {
                 effects.append(.record(.cycleEnded(.completed), at: now))
                 return Transition(cycle: nil, effects: effects)
             }
-            next.phase = .break
-            next.phaseStart = now
+            next.state = .break
+            next.stateStart = now
         case .stop:
-            let elapsed = now.timeIntervalSince(next.phaseStart)
-            switch next.phase {
+            let elapsed = now.timeIntervalSince(next.stateStart)
+            switch next.state {
             case .active:
                 effects.append(try next.activeEnded(at: now))
             case .break:
@@ -146,7 +147,7 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     /// The log entry for ending the current Active now, which needs no reason once its
     /// planned length is reached.
     private func activeEnded(at now: Date) throws(Rejection) -> Effect {
-        let actual = now.timeIntervalSince(phaseStart)
+        let actual = now.timeIntervalSince(stateStart)
         guard actual >= plan.activeLength else { throw .reasonRequired }
         return .record(.activeEnded(planned: plan.activeLength, actual: actual, overtime: overtime(at: now)), at: now)
     }
@@ -154,8 +155,8 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     /// Ends a Break whose planned length has run out, as of the moment it ran out.
     private mutating func advance(to now: Date) -> [Effect] {
         guard let breakEnd = nextDeadline, now >= breakEnd else { return [] }
-        phase = .idle
-        phaseStart = breakEnd
+        state = .idle
+        stateStart = breakEnd
         return [.record(.breakEnded(planned: plan.breakLength, actual: plan.breakLength), at: breakEnd)]
     }
 }
