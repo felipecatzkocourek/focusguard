@@ -15,6 +15,18 @@ pull request.
 5. CI must be green. PRs are **squash-merged**, so the PR title becomes the commit on
    `main` and has to follow the commit convention too.
 
+### Blocking fixes
+
+If a bug blocks the work on the current ticket and the fix is small (a few lines,
+no design decision), fix it on the same branch instead of opening a new issue:
+
+- Give it its own `fix:` commit, separate from the ticket's commits, with a body
+  that says what broke and why it blocked the work.
+- List it under "Also" in the PR's "What changes" section.
+- Add it to `CHANGELOG.md` under `Fixed`.
+
+If the fix is larger or needs a decision, open an issue and a separate PR.
+
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/):
@@ -26,7 +38,7 @@ pull request.
 ```
 
 Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`.
-Scopes used in this repo: `core`, `helper`, `app`.
+Scopes used in this repo: `core`, `helper`, `app`, `scripts`.
 
 ## Versioning and releases
 

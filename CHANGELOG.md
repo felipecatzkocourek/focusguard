@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and each Cycle's start and end appear in today's activity. The Cycle doesn't block anything
   yet.
 
+### Fixed
+- `scripts/build-app.sh` no longer aborts with "unbound variable" under macOS's bash 3.2
+  before assembling the app bundle.
+
 ## [0.1.0] - 2026-10-08
 
 ### Added
