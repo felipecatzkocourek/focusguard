@@ -259,10 +259,10 @@ private struct ActivityRow: View {
         case .allowanceExpired(let domain): "\(domain) blocked again"
         case .cycleStarted(let plan):
             "Pomodoro started · \(plan.actives) × \(plan.activeMinutes) min, Breaks of \(plan.breakMinutes)"
-        case .activeEnded(_, let actual, let overtime):
-            overtime > 0
-                ? "Active ended · \(formatMinutes(actual)) (\(formatMinutes(overtime)) Overtime)"
-                : "Active ended · \(formatMinutes(actual))"
+        case .activeEnded(let planned, let actual):
+            actual > planned
+                ? "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(actual - planned)) Overtime)"
+                : "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
         case .breakEnded(let planned, let actual):
             actual < planned
                 ? "Break cut short · \(formatMinutes(actual)) of \(formatMinutes(planned))"

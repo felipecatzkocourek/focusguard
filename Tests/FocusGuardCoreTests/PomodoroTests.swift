@@ -42,7 +42,7 @@ struct PomodoroTests {
         #expect(cycle.state == .break)
         #expect(cycle.remaining(at: at(28)) == minutes(5))
         #expect(transition.effects == [
-            .record(.activeEnded(planned: minutes(25), actual: minutes(28), overtime: minutes(3)), at: at(28)),
+            .record(.activeEnded(planned: minutes(25), actual: minutes(28)), at: at(28)),
         ])
     }
 
@@ -103,13 +103,13 @@ struct PomodoroTests {
 
         #expect(ended == nil)
         #expect(effects == [
-            .record(.activeEnded(planned: minutes(25), actual: minutes(25), overtime: 0), at: at(25)),
+            .record(.activeEnded(planned: minutes(25), actual: minutes(25)), at: at(25)),
             .record(.breakEnded(planned: minutes(5), actual: minutes(5)), at: at(30)),
             .record(.idle(duration: minutes(2)), at: at(32)),
-            .record(.activeEnded(planned: minutes(25), actual: minutes(27), overtime: minutes(2)), at: at(59)),
+            .record(.activeEnded(planned: minutes(25), actual: minutes(27)), at: at(59)),
             .record(.breakEnded(planned: minutes(5), actual: minutes(5)), at: at(64)),
             .record(.idle(duration: 0), at: at(64)),
-            .record(.activeEnded(planned: minutes(25), actual: minutes(25), overtime: 0), at: at(89)),
+            .record(.activeEnded(planned: minutes(25), actual: minutes(25)), at: at(89)),
             .record(.cycleEnded(.completed), at: at(89)),
         ])
     }
@@ -121,7 +121,7 @@ struct PomodoroTests {
 
         #expect(transition.cycle == nil)
         #expect(transition.effects == [
-            .record(.activeEnded(planned: minutes(25), actual: minutes(30), overtime: minutes(5)), at: at(30)),
+            .record(.activeEnded(planned: minutes(25), actual: minutes(30)), at: at(30)),
             .record(.cycleEnded(.stopped), at: at(30)),
         ])
     }

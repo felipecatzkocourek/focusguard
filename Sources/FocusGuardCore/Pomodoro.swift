@@ -149,7 +149,7 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     private func activeEnded(at now: Date) throws(Rejection) -> Effect {
         let actual = now.timeIntervalSince(stateStart)
         guard actual >= plan.activeLength else { throw .reasonRequired }
-        return .record(.activeEnded(planned: plan.activeLength, actual: actual, overtime: overtime(at: now)), at: now)
+        return .record(.activeEnded(planned: plan.activeLength, actual: actual), at: now)
     }
 
     /// Ends a Break whose planned length has run out, as of the moment it ran out.

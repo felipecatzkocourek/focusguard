@@ -55,7 +55,7 @@ struct ActivityLogTests {
     @Test func pomodoroEventsSurviveSavingAndLoading() throws {
         var log = ActivityLog()
         log.record(.cycleStarted(plan: Plan(activeMinutes: 25, breakMinutes: 5, actives: 4)!), at: date(9))
-        log.record(.activeEnded(planned: 1500, actual: 1680, overtime: 180), at: date(9, 28))
+        log.record(.activeEnded(planned: 1500, actual: 1680), at: date(9, 28))
         log.record(.breakEnded(planned: 300, actual: 300), at: date(9, 33))
         log.record(.idle(duration: 120), at: date(9, 35))
         log.record(.cycleEnded(.stopped), at: date(9, 40))
