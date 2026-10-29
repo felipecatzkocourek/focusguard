@@ -24,5 +24,5 @@ The safeguard moves to the Active: ending an Active before its planned length re
 
 - The README promise "blocking only ends when the Focus really turns off" no longer holds unconditionally and must be reworded: an app control (starting a Break) can now open all sites for a bounded time.
 - Ending an Active early is the shortest path to unblocking, so it carries Friction (a reason) and is logged as cut short.
-- Pomodoro durations cannot be changed while a Cycle is running. The only way to lengthen a running Break is a Snooze: 5 minutes at a time, at most 6 per Break, each one logged.
-- `BlockPlanner` must take the Pomodoro state into account alongside Allowances.
+- A Plan's lengths cannot be changed while its Cycle is running. The only way to lengthen a running Break is a Snooze: 5 minutes at a time, at most 6 per Break, each one logged.
+- `BlockPlanner` must take the Cycle's state into account alongside Allowances.
