@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Pomodoro tab: build a Plan by hand (Active length, Break length, number of Actives) and
+  run a Planned Cycle on a large timer. Actives run into Overtime until you end them, Breaks
+  end on their own, and the Cycle waits in Idle until you start the next Active. Every Phase
+  and each Cycle's start and end appear in today's activity. The Cycle doesn't block anything
+  yet.
+
 ## [0.1.0] - 2026-10-08
 
 ### Added
