@@ -17,7 +17,7 @@ swift build -c release --product FocusGuard
 swift build -c release --product focusguard-helper
 BIN="$(swift build -c release --show-bin-path)"
 
-echo "→ Assembling $APP…"
+echo "→ Assembling ${APP}…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/FocusGuard" "$APP/Contents/MacOS/FocusGuard"

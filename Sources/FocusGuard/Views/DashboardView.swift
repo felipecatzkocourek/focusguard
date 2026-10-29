@@ -2,7 +2,7 @@ import FocusGuardCore
 import SwiftUI
 
 enum DashboardTab: Hashable {
-    case today, sites, settings, setup
+    case today, pomodoro, sites, settings, setup
 }
 
 struct DashboardView: View {
@@ -17,6 +17,8 @@ struct DashboardView: View {
             TabView(selection: $tab) {
                 TodayView(openSetup: { tab = .setup })
                     .tabItem { Text("Today") }.tag(DashboardTab.today)
+                PomodoroView()
+                    .tabItem { Text("Pomodoro") }.tag(DashboardTab.pomodoro)
                 SitesView()
                     .tabItem { Text("Sites") }.tag(DashboardTab.sites)
                 SettingsView()
@@ -27,6 +29,9 @@ struct DashboardView: View {
             .padding()
         }
         .frame(minWidth: 460, minHeight: 560)
+        .onChange(of: model.cycle == nil) { _, noCycle in
+            if !noCycle { tab = .pomodoro }
+        }
     }
 
     private var bannerMessage: (text: String, showSetup: Bool)? {
@@ -223,6 +228,12 @@ private struct ActivityRow: View {
         case .sessionEnded: "stop.fill"
         case .allowanceGranted: "lock.open.fill"
         case .allowanceExpired: "lock.fill"
+        case .cycleStarted: "timer"
+        case .activeEnded: "checkmark.circle.fill"
+        case .breakEnded: "cup.and.saucer.fill"
+        case .idle: "hourglass"
+        case .cycleEnded(.completed): "flag.checkered"
+        case .cycleEnded(.stopped): "stop.circle"
         }
     }
 
@@ -232,6 +243,10 @@ private struct ActivityRow: View {
         case .sessionEnded: .secondary
         case .allowanceGranted: .orange
         case .allowanceExpired: .red
+        case .cycleStarted, .cycleEnded: .accentColor
+        case .activeEnded: .green
+        case .breakEnded: .teal
+        case .idle: .secondary
         }
     }
 
@@ -242,6 +257,19 @@ private struct ActivityRow: View {
         case .allowanceGranted(let domain, let reason, let minutes):
             reason.isEmpty ? "Allowed \(domain) for \(minutes) min" : "Allowed \(domain) for \(minutes) min: “\(reason)”"
         case .allowanceExpired(let domain): "\(domain) blocked again"
+        case .cycleStarted(let plan):
+            "Cycle started · \(plan.summary)"
+        case .activeEnded(let planned, let actual):
+            event.kind.overtime > 0
+                ? "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(event.kind.overtime)) Overtime)"
+                : "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
+        case .breakEnded(let planned, let actual):
+            actual < planned
+                ? "Break cut short · \(formatMinutes(actual)) of \(formatMinutes(planned))"
+                : "Break ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
+        case .idle(let duration): "Idle · \(formatMinutes(duration))"
+        case .cycleEnded(.completed): "Cycle completed"
+        case .cycleEnded(.stopped): "Cycle stopped"
         }
     }
 }
@@ -271,6 +299,17 @@ struct StatusPill: View {
 func formatDuration(_ interval: TimeInterval) -> String {
     let minutes = Int(interval) / 60
     return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+}
+
+extension Plan {
+    /// "4 × 25 min, Breaks of 5", for the Plan editor and the activity log.
+    var summary: String { "\(actives) × \(activeMinutes) min, Breaks of \(breakMinutes)" }
+}
+
+/// Rounded to whole minutes, for log entries ("27 min", "<1 min").
+func formatMinutes(_ interval: TimeInterval) -> String {
+    let minutes = Int((interval / 60).rounded())
+    return minutes == 0 && interval > 0 ? "<1 min" : "\(minutes) min"
 }
 
 func formatCountdown(_ interval: TimeInterval) -> String {

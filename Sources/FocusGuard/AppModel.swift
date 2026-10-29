@@ -18,6 +18,8 @@ final class AppModel {
     private(set) var helperStatus: HelperStatus = .checking
     private(set) var lastError: String?
     private(set) var launchesAtLogin = SMAppService.mainApp.status == .enabled
+    /// The running Pomodoro Cycle, if any. It is a timer only: it never changes what is blocked.
+    private(set) var cycle: PomodoroCycle?
 
     /// Called when a blocking session starts, so the app can bring the dashboard up.
     @ObservationIgnored var onSessionStarted: (() -> Void)?
@@ -33,6 +35,8 @@ final class AppModel {
     @ObservationIgnored private let stateStore: JSONStore<BlockState>
     @ObservationIgnored private let logStore: JSONStore<ActivityLog>
     @ObservationIgnored private var pollTimer: Timer?
+    /// Fires when the current Break runs out, so Idle starts on time instead of at the next poll.
+    @ObservationIgnored private var cycleTimer: Timer?
     @ObservationIgnored private var isApplying = false
     @ObservationIgnored private var lastFailure: (hostnames: [String], date: Date)?
 
@@ -75,6 +79,7 @@ final class AppModel {
     /// site unblocked past its time. Blocking itself stays in place.
     func prepareForTermination() {
         pollTimer?.invalidate()
+        cycleTimer?.invalidate()
         guard state.isBlocking, !state.allowances.isEmpty else { return }
         state.allowances.removeAll()
         save()
@@ -88,6 +93,7 @@ final class AppModel {
         let snapshot = await Task.detached { FocusMonitor.read() }.value
         if snapshot != focus { focus = snapshot }
         updateSession()
+        if cycle != nil { handle(.tick) }
         await reconcile()
     }
 
@@ -113,6 +119,49 @@ final class AppModel {
             log.record(.sessionEnded, at: now)
         }
         save()
+    }
+
+    // MARK: - Pomodoro
+
+    func startCycle(_ plan: Plan) {
+        guard cycle == nil else { return }
+        apply(PomodoroCycle.start(plan, at: Date()))
+    }
+
+    func endActive() { handle(.endActive) }
+    func startActive() { handle(.startActive) }
+    func stopCycle() { handle(.stop) }
+
+    private func handle(_ input: PomodoroCycle.Input) {
+        guard let cycle else { return }
+        do {
+            apply(try cycle.handle(input, at: Date()))
+        } catch {
+            // The UI only offers inputs the current state accepts; a race with the Break
+            // running out is harmless, so just note it.
+            Log.session.notice("Cycle input \(String(describing: input), privacy: .public) rejected: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func apply(_ transition: PomodoroCycle.Transition) {
+        guard transition.cycle != cycle || !transition.effects.isEmpty else { return }
+        cycle = transition.cycle
+        for effect in transition.effects {
+            switch effect {
+            case .record(let kind, let date): log.record(kind, at: date)
+            }
+        }
+        save()
+
+        cycleTimer?.invalidate()
+        cycleTimer = nil
+        if let deadline = cycle?.nextDeadline {
+            let timer = Timer(fire: deadline, interval: 0, repeats: false) { [weak self] _ in
+                Task { @MainActor in self?.handle(.tick) }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            cycleTimer = timer
+        }
     }
 
     // MARK: - User actions
