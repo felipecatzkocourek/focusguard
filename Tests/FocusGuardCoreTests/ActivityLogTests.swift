@@ -52,6 +52,28 @@ struct ActivityLogTests {
         #expect(log.events(on: date(12), calendar: calendar).count == 1)
     }
 
+    @Test func pomodoroEventsSurviveSavingAndLoading() throws {
+        var log = ActivityLog()
+        log.record(.cycleStarted(plan: Plan(activeMinutes: 25, breakMinutes: 5, actives: 4)!), at: date(9))
+        log.record(.activeEnded(planned: 1500, actual: 1680, overtime: 180), at: date(9, 28))
+        log.record(.breakEnded(planned: 300, actual: 300), at: date(9, 33))
+        log.record(.idle(duration: 120), at: date(9, 35))
+        log.record(.cycleEnded(.stopped), at: date(9, 40))
+
+        let decoded = try JSONDecoder().decode(ActivityLog.self, from: JSONEncoder().encode(log))
+        #expect(decoded == log)
+        #expect(decoded.events(on: date(12), calendar: calendar).count == 5)
+    }
+
+    @Test func logsWrittenBeforeThePomodoroStillDecode() throws {
+        let json = """
+        {"events":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","date":800000000,
+        "kind":{"allowanceGranted":{"domain":"youtube.com","reason":"tutorial","minutes":15}}}]}
+        """
+        let log = try JSONDecoder().decode(ActivityLog.self, from: Data(json.utf8))
+        #expect(log.events.map(\.kind) == [.allowanceGranted(domain: "youtube.com", reason: "tutorial", minutes: 15)])
+    }
+
     @Test func dropsEventsOlderThanRetention() {
         var log = ActivityLog()
         log.record(.sessionStarted(focus: "Work"), at: date(9, day: 1).addingTimeInterval(-40 * 24 * 3600))

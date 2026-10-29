@@ -7,6 +7,11 @@ public struct ActivityEvent: Codable, Equatable, Sendable, Identifiable {
         case sessionEnded
         case allowanceGranted(domain: String, reason: String, minutes: Int)
         case allowanceExpired(domain: String)
+        case cycleStarted(plan: Plan)
+        case activeEnded(planned: TimeInterval, actual: TimeInterval, overtime: TimeInterval)
+        case breakEnded(planned: TimeInterval, actual: TimeInterval)
+        case idle(duration: TimeInterval)
+        case cycleEnded(PomodoroCycle.Ending)
     }
 
     public var id: UUID

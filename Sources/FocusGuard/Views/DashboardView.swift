@@ -223,6 +223,7 @@ private struct ActivityRow: View {
         case .sessionEnded: "stop.fill"
         case .allowanceGranted: "lock.open.fill"
         case .allowanceExpired: "lock.fill"
+        default: "timer" // TODO(#22)
         }
     }
 
@@ -232,6 +233,7 @@ private struct ActivityRow: View {
         case .sessionEnded: .secondary
         case .allowanceGranted: .orange
         case .allowanceExpired: .red
+        default: .secondary // TODO(#22)
         }
     }
 
@@ -242,6 +244,7 @@ private struct ActivityRow: View {
         case .allowanceGranted(let domain, let reason, let minutes):
             reason.isEmpty ? "Allowed \(domain) for \(minutes) min" : "Allowed \(domain) for \(minutes) min: “\(reason)”"
         case .allowanceExpired(let domain): "\(domain) blocked again"
+        default: "Pomodoro" // TODO(#22)
         }
     }
 }
