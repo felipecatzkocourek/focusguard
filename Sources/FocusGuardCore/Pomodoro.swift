@@ -17,6 +17,11 @@ public struct Plan: Codable, Equatable, Hashable, Sendable {
 
     public var activeLength: TimeInterval { TimeInterval(activeMinutes * 60) }
     public var breakLength: TimeInterval { TimeInterval(breakMinutes * 60) }
+
+    /// Every Active plus the Breaks between them, assuming no Overtime or Idle.
+    public var totalLength: TimeInterval {
+        TimeInterval(actives) * activeLength + TimeInterval(actives - 1) * breakLength
+    }
 }
 
 /// One run of a Pomodoro Cycle as a pure state machine. It has no timers or I/O: every
@@ -78,6 +83,21 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         return max(now.timeIntervalSince(stateStart) - plan.activeLength, 0)
     }
 
+    /// Whether the current Active has run its planned length, so ending it needs no reason.
+    /// Always `false` outside an Active.
+    public func reachedPlannedLength(at now: Date) -> Bool {
+        state == .active && now.timeIntervalSince(stateStart) >= plan.activeLength
+    }
+
+    /// Whether Stop is accepted now without Friction: anywhere except an Active that hasn't
+    /// reached its planned length.
+    public func canStop(at now: Date) -> Bool {
+        state != .active || reachedPlannedLength(at: now)
+    }
+
+    /// Whether the current (or, during a Break or Idle, the last) Active is the Plan's last.
+    public var isLastActive: Bool { activeNumber == plan.actives }
+
     /// When the Cycle will change on its own (the end of the current Break), so the app can
     /// schedule a tick for that moment. Actives and Idle wait for the user.
     public var nextDeadline: Date? {
@@ -122,7 +142,7 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         case .endActive:
             guard next.state == .active else { throw .notAllowed }
             effects.append(try next.activeEnded(at: now))
-            guard next.activeNumber < plan.actives else {
+            guard !next.isLastActive else {
                 effects.append(.record(.cycleEnded(.completed), at: now))
                 return Transition(cycle: nil, effects: effects)
             }
@@ -147,9 +167,8 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
     /// The log entry for ending the current Active now, which needs no reason once its
     /// planned length is reached.
     private func activeEnded(at now: Date) throws(Rejection) -> Effect {
-        let actual = now.timeIntervalSince(stateStart)
-        guard actual >= plan.activeLength else { throw .reasonRequired }
-        return .record(.activeEnded(planned: plan.activeLength, actual: actual), at: now)
+        guard reachedPlannedLength(at: now) else { throw .reasonRequired }
+        return .record(.activeEnded(planned: plan.activeLength, actual: now.timeIntervalSince(stateStart)), at: now)
     }
 
     /// Ends a Break whose planned length has run out, as of the moment it ran out.

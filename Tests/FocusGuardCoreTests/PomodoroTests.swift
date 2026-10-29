@@ -161,6 +161,58 @@ struct PomodoroTests {
         }
     }
 
+    @Test func stopExactlyAtThePlannedLengthNeedsNoReason() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        let transition = try started.handle(.stop, at: at(25))
+
+        #expect(transition.cycle == nil)
+        #expect(transition.effects == [
+            .record(.activeEnded(planned: minutes(25), actual: minutes(25)), at: at(25)),
+            .record(.cycleEnded(.stopped), at: at(25)),
+        ])
+    }
+
+    @Test func anActiveCanBeEndedOrStoppedOnceItReachesItsPlannedLength() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        #expect(!started.reachedPlannedLength(at: at(24)))
+        #expect(!started.canStop(at: at(24)))
+        #expect(started.reachedPlannedLength(at: at(25)))
+        #expect(started.canStop(at: at(25)))
+        #expect(started.canStop(at: at(40)))
+    }
+
+    @Test func aBreakOrIdleCanAlwaysBeStopped() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+        let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
+        let idle = try #require(try onBreak.handle(.tick, at: at(31)).cycle)
+
+        #expect(!onBreak.reachedPlannedLength(at: at(26)))
+        #expect(onBreak.canStop(at: at(26)))
+        #expect(!idle.reachedPlannedLength(at: at(31)))
+        #expect(idle.canStop(at: at(31)))
+    }
+
+    @Test func onlyTheLastActiveOfThePlanIsTheLast() throws {
+        let first = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+        let onBreak = try #require(try first.handle(.endActive, at: at(25)).cycle)
+        let idle = try #require(try onBreak.handle(.tick, at: at(30)).cycle)
+        let second = try #require(try idle.handle(.startActive, at: at(30)).cycle)
+        let secondBreak = try #require(try second.handle(.endActive, at: at(55)).cycle)
+        let secondIdle = try #require(try secondBreak.handle(.tick, at: at(60)).cycle)
+        let third = try #require(try secondIdle.handle(.startActive, at: at(60)).cycle)
+
+        #expect(!first.isLastActive)
+        #expect(!second.isLastActive)
+        #expect(third.isLastActive)
+    }
+
+    @Test func aPlanKnowsItsTotalLength() {
+        // 3 Actives of 25 min and the 2 Breaks of 5 min between them.
+        #expect(plan.totalLength == minutes(85))
+    }
+
     @Test func onlyABreakHasADeadlineOfItsOwn() throws {
         let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
         let onBreak = try #require(try started.handle(.endActive, at: at(27)).cycle)

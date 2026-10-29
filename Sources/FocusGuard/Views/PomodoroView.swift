@@ -71,7 +71,7 @@ private struct RunningCycleView: View {
                 }
                 Spacer()
                 mainButton(at: now)
-                if canStop(at: now) {
+                if cycle.canStop(at: now) {
                     Button("Stop", role: .destructive) { model.stopCycle() }
                 }
             }
@@ -79,8 +79,6 @@ private struct RunningCycleView: View {
             .padding(4)
         }
     }
-
-    private var isLastActive: Bool { cycle.activeNumber == cycle.plan.actives }
 
     private var title: String {
         switch cycle.state {
@@ -97,19 +95,9 @@ private struct RunningCycleView: View {
         return formatCountdown(now.timeIntervalSince(cycle.stateStart))
     }
 
-    private func reachedPlannedLength(at now: Date) -> Bool {
-        cycle.state == .active && cycle.remaining(at: now) == 0
-    }
-
-    /// Stop needs no Friction except during an Active before its planned length, where
-    /// it isn't offered yet.
-    private func canStop(at now: Date) -> Bool {
-        cycle.state != .active || reachedPlannedLength(at: now)
-    }
-
     @ViewBuilder private func mainButton(at now: Date) -> some View {
-        if reachedPlannedLength(at: now) {
-            BigButton(title: isLastActive ? "Finish Cycle" : "Start Break", action: model.endActive)
+        if cycle.reachedPlannedLength(at: now) {
+            BigButton(title: cycle.isLastActive ? "Finish Cycle" : "Start Break", action: model.endActive)
         } else if cycle.state == .idle {
             BigButton(title: "Start Active \(cycle.activeNumber + 1)", action: model.startActive)
         }
@@ -126,11 +114,5 @@ private struct BigButton: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.extraLarge)
-    }
-}
-
-private extension Plan {
-    var totalLength: TimeInterval {
-        TimeInterval(actives) * activeLength + TimeInterval(actives - 1) * breakLength
     }
 }
