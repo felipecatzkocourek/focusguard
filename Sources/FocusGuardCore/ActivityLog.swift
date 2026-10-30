@@ -35,11 +35,56 @@ public struct ActivityEvent: Codable, Equatable, Sendable, Identifiable {
 public struct ActivityLog: Codable, Equatable, Sendable {
     public private(set) var events: [ActivityEvent]
 
+    /// Events in the decoded file that this build couldn't decode (e.g. a kind added by a
+    /// newer build). They're reported to unified logging, kept out of `events`, and not
+    /// saved back. Not part of the log's identity.
+    public private(set) var skipped: [SkippedEvent] = []
+
+    /// The raw form of an event that failed to decode, and why.
+    public struct SkippedEvent: Equatable, Sendable {
+        public let json: String
+        public let error: String
+    }
+
     /// Events older than this are dropped to keep the file small.
     public static let retention: TimeInterval = 30 * 24 * 60 * 60
 
     public init(events: [ActivityEvent] = []) {
         self.events = events.sorted { $0.date < $1.date }
+    }
+
+    private enum CodingKeys: String, CodingKey { case events }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let entries = try container.decode([LossyEvent].self, forKey: .events)
+        events = entries.compactMap(\.event)
+        skipped = entries.compactMap(\.skipped)
+        for event in skipped {
+            Log.persistence.error(
+                "Skipped an activity event this build can't decode: \(event.json, privacy: .public) — \(event.error, privacy: .public)"
+            )
+        }
+    }
+
+    public static func == (lhs: ActivityLog, rhs: ActivityLog) -> Bool {
+        lhs.events == rhs.events
+    }
+
+    /// One entry of `events`: decodes as an event when it can, and otherwise keeps its raw
+    /// JSON instead of failing the whole log.
+    private struct LossyEvent: Decodable {
+        var event: ActivityEvent?
+        var skipped: SkippedEvent?
+
+        init(from decoder: Decoder) throws {
+            do {
+                event = try ActivityEvent(from: decoder)
+            } catch {
+                let json = (try? JSONValue(from: decoder))?.jsonString ?? "<not JSON>"
+                skipped = SkippedEvent(json: json, error: String(describing: error))
+            }
+        }
     }
 
     public mutating func record(_ kind: ActivityEvent.Kind, at date: Date) {

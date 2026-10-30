@@ -80,6 +80,38 @@ struct ActivityLogTests {
         #expect(log.events.map(\.kind) == [.allowanceGranted(domain: "youtube.com", reason: "tutorial", minutes: 15)])
     }
 
+    /// Two well-formed events around an unknown kind (from a newer build) and a known kind
+    /// whose payload doesn't match this build.
+    static let mixedLogJSON = """
+    {"events":[
+    {"id":"00000000-0000-0000-0000-000000000001","date":800000000,"kind":{"sessionStarted":{"focus":"Work"}}},
+    {"id":"00000000-0000-0000-0000-000000000002","date":800000060,"kind":{"teleported":{"to":"Mars"}}},
+    {"id":"00000000-0000-0000-0000-000000000003","date":800000120,"kind":{"idle":{"seconds":30}}},
+    {"id":"00000000-0000-0000-0000-000000000004","date":800000180,"kind":{"sessionEnded":{}}}
+    ]}
+    """
+
+    @Test func skipsEventsThisBuildCantDecode() throws {
+        let log = try JSONDecoder().decode(ActivityLog.self, from: Data(Self.mixedLogJSON.utf8))
+        #expect(log.events.map(\.kind) == [.sessionStarted(focus: "Work"), .sessionEnded])
+    }
+
+    @Test func reportsEverySkippedEvent() throws {
+        let log = try JSONDecoder().decode(ActivityLog.self, from: Data(Self.mixedLogJSON.utf8))
+        #expect(log.skipped.count == 2)
+        #expect(log.skipped[0].json.contains("teleported"))
+        #expect(log.skipped[0].json.contains("00000000-0000-0000-0000-000000000002"))
+        #expect(log.skipped[1].json.contains("\"seconds\":30"))
+        #expect(log.skipped.allSatisfy { !$0.error.isEmpty })
+    }
+
+    @Test func skippedEventsAreNotSavedBack() throws {
+        let log = try JSONDecoder().decode(ActivityLog.self, from: Data(Self.mixedLogJSON.utf8))
+        let resaved = try JSONDecoder().decode(ActivityLog.self, from: JSONEncoder().encode(log))
+        #expect(resaved.events == log.events)
+        #expect(resaved.skipped.isEmpty)
+    }
+
     @Test func dropsEventsOlderThanRetention() {
         var log = ActivityLog()
         log.record(.sessionStarted(focus: "Work"), at: date(9, day: 1).addingTimeInterval(-40 * 24 * 3600))
