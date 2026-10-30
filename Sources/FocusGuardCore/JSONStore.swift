@@ -1,7 +1,8 @@
 import Foundation
 
 /// Loads and saves a `Codable` value as a JSON file, falling back to a default value
-/// when the file is missing or unreadable (e.g. after a schema change).
+/// when the file is missing or unreadable (e.g. after a schema change). An unreadable file
+/// is moved aside first, so the next save doesn't destroy it.
 public struct JSONStore<Value: Codable & Sendable>: Sendable {
     public let url: URL
     private let defaultValue: @Sendable () -> Value
@@ -12,10 +13,32 @@ public struct JSONStore<Value: Codable & Sendable>: Sendable {
     }
 
     public func load() -> Value {
-        guard let data = try? Data(contentsOf: url),
-              let value = try? Self.decoder.decode(Value.self, from: data)
-        else { return defaultValue() }
-        return value
+        guard FileManager.default.fileExists(atPath: url.path) else { return defaultValue() }
+        do {
+            return try Self.decoder.decode(Value.self, from: Data(contentsOf: url))
+        } catch {
+            setAside(because: error)
+            return defaultValue()
+        }
+    }
+
+    /// Moves the file to `<name>.unreadable-<timestamp>` next to it.
+    private func setAside(because error: Error) {
+        let timestamp = ISO8601DateFormatter.string(
+            from: Date(), timeZone: .gmt, formatOptions: [.withYear, .withMonth, .withDay, .withTime, .withTimeZone]
+        )
+        let sideURL = url.deletingLastPathComponent()
+            .appending(path: "\(url.lastPathComponent).unreadable-\(timestamp)")
+        do {
+            try FileManager.default.moveItem(at: url, to: sideURL)
+            Log.persistence.error(
+                "Set aside unreadable \(url.path, privacy: .public) as \(sideURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
+        } catch let moveError {
+            Log.persistence.fault(
+                "Couldn't set aside unreadable \(url.path, privacy: .public): \(String(describing: moveError), privacy: .public)"
+            )
+        }
     }
 
     public func save(_ value: Value) throws {

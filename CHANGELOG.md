@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   yet.
 
 ### Fixed
+- An activity event this build can't decode (e.g. a kind written by a newer build) no
+  longer wipes the whole activity history: it's skipped, reported to unified logging
+  (category `persistence`) and left out of the next save, and every other event is kept.
+- A store file (`config.json`, `state.json`, `activity.json`) that exists but can't be
+  decoded is moved aside to `<name>.unreadable-<timestamp>` and logged before FocusGuard
+  falls back to defaults, so the next save no longer overwrites it.
 - `scripts/build-app.sh` no longer aborts with "unbound variable" under macOS's bash 3.2
   before assembling the app bundle.
 
