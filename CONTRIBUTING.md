@@ -6,7 +6,8 @@ In short: every change starts from a GitHub issue, lives on a branch from `main`
 `<type>/<issue>-<slug>` (e.g. `feat/12-site-list`), is committed in small
 [Conventional Commits](https://www.conventionalcommits.org/), and lands through a PR
 that says `Closes #N`. CI must be green; PRs are squash-merged after review, so the PR
-title becomes the commit on `main`. A small fix that blocks the current ticket can ride
+title becomes the commit on `main`. PR titles follow Conventional Commits and stay within
+72 characters; CI checks this. A small fix that blocks the current ticket can ride
 on the same branch as its own `fix:` commit, noted in the PR and under `Fixed` in
 `CHANGELOG.md`; anything bigger gets its own issue and PR.
 
@@ -23,7 +24,7 @@ To cut a release:
 
 1. Move the `[Unreleased]` entries in `CHANGELOG.md` under a new version heading.
 2. Update `VERSION` and `version` in `Sources/FocusGuardHelper/main.swift`.
-3. Merge to `main`, then tag and publish:
+3. Merge to `main` (the release commit is `chore(release): vX.Y.Z`), then tag and publish:
    ```bash
    git tag -a v0.1.0 -m "v0.1.0"
    git push origin v0.1.0
