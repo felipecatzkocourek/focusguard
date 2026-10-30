@@ -70,7 +70,7 @@ _Avoid_: Waiting, paused
 The time an Active runs past its planned length because the user kept working.
 
 **Cut short**:
-Said of a Phase the user ended before its planned length.
+Said of a Phase that ended before its planned length, whether the user ended it or the Cycle ended under it (an app quit, a shutdown, a crash). Only an Active the user cuts short asks for a reason.
 _Avoid_: Undertime, aborted
 
 **Shortfall**:
