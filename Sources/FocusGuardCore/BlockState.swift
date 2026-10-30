@@ -37,6 +37,13 @@ public struct BlockState: Codable, Equatable, Sendable {
         self.allowances = allowances
     }
 
+    /// Replaces the running Cycle (`nil` once it has ended) after a transition at `now`,
+    /// which is also the latest time it is known to be open.
+    public mutating func setCycle(_ cycle: PomodoroCycle?, at now: Date) {
+        self.cycle = cycle
+        cycleSeenAt = cycle == nil ? nil : now
+    }
+
     /// How stale `cycleSeenAt` may get before it's moved forward: the most a crash can take
     /// off the logged length of the last Phase, traded against rewriting the file every poll.
     public static let cycleSeenInterval: TimeInterval = 60

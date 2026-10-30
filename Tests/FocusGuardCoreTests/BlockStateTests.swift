@@ -33,6 +33,26 @@ struct BlockStateTests {
         #expect(effects.isEmpty)
     }
 
+    @Test func settingTheRunningCycleMarksItSeenThen() throws {
+        var state = BlockState()
+        let cycle = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        state.setCycle(cycle, at: at(2))
+
+        #expect(state.cycle == cycle)
+        #expect(state.cycleSeenAt == at(2))
+    }
+
+    @Test func clearingTheCycleForgetsWhenItWasSeen() {
+        var state = BlockState()
+        state.setCycle(PomodoroCycle.start(plan, at: t0).cycle, at: t0)
+
+        state.setCycle(nil, at: at(5))
+
+        #expect(state.cycle == nil)
+        #expect(state.cycleSeenAt == nil)
+    }
+
     @Test func aRunningCycleIsMarkedSeenAtMostOnceAMinute() {
         var state = BlockState()
         state.cycle = PomodoroCycle.start(plan, at: t0).cycle

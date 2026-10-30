@@ -178,8 +178,7 @@ final class AppModel {
 
     private func apply(_ transition: PomodoroCycle.Transition) {
         guard transition.cycle != cycle || !transition.effects.isEmpty else { return }
-        state.cycle = transition.cycle
-        state.cycleSeenAt = transition.cycle == nil ? nil : Date()
+        state.setCycle(transition.cycle, at: Date())
         carryOut(transition.effects)
         save()
 
