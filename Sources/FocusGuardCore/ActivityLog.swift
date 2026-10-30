@@ -8,7 +8,8 @@ public struct ActivityEvent: Codable, Equatable, Sendable, Identifiable {
         case allowanceGranted(domain: String, reason: String, minutes: Int)
         case allowanceExpired(domain: String)
         case cycleStarted(plan: Plan)
-        case activeEnded(planned: TimeInterval, actual: TimeInterval)
+        /// `reason` is the one the user typed to cut the Active short; `nil` otherwise.
+        case activeEnded(planned: TimeInterval, actual: TimeInterval, reason: String? = nil)
         case breakEnded(planned: TimeInterval, actual: TimeInterval)
         case idle(duration: TimeInterval)
         case cycleEnded(PomodoroCycle.Ending)
@@ -16,8 +17,24 @@ public struct ActivityEvent: Codable, Equatable, Sendable, Identifiable {
         /// How long an ended Active ran past its planned length; zero for other kinds.
         /// Derived rather than stored, so it can't drift from the two lengths.
         public var overtime: TimeInterval {
-            guard case .activeEnded(let planned, let actual) = self else { return 0 }
+            guard case .activeEnded(let planned, let actual, _) = self else { return 0 }
             return max(actual - planned, 0)
+        }
+
+        /// The planned time a cut-short Active did not cover; zero for other kinds.
+        public var shortfall: TimeInterval {
+            guard case .activeEnded(let planned, let actual, _) = self else { return 0 }
+            return max(planned - actual, 0)
+        }
+
+        /// Whether an ended Active or Break stopped before its planned length.
+        public var isCutShort: Bool {
+            switch self {
+            case .activeEnded(let planned, let actual, _), .breakEnded(let planned, let actual):
+                actual < planned
+            default:
+                false
+            }
         }
     }
 

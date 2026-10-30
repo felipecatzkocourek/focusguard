@@ -25,10 +25,46 @@ public struct BlockState: Codable, Equatable, Sendable {
     /// Whether a blocking session is running (one of the trigger Focus modes is on).
     public var isBlocking: Bool
     public var allowances: [Allowance]
+    /// The running Pomodoro Cycle, kept here so one left open by a crash or force quit is
+    /// found at the next launch and closed (never resumed).
+    public var cycle: PomodoroCycle?
+    /// The last time the app was known to be running with `cycle` open: where a Cycle left
+    /// open is closed.
+    public var cycleSeenAt: Date?
 
     public init(isBlocking: Bool = false, allowances: [Allowance] = []) {
         self.isBlocking = isBlocking
         self.allowances = allowances
+    }
+
+    /// Replaces the running Cycle (`nil` once it has ended) after a transition at `now`,
+    /// which is also the latest time it is known to be open.
+    public mutating func setCycle(_ cycle: PomodoroCycle?, at now: Date) {
+        self.cycle = cycle
+        cycleSeenAt = cycle == nil ? nil : now
+    }
+
+    /// How stale `cycleSeenAt` may get before it's moved forward: the most a crash can take
+    /// off the logged length of the last Phase, traded against rewriting the file every poll.
+    public static let cycleSeenInterval: TimeInterval = 60
+
+    /// Moves `cycleSeenAt` to `now` while a Cycle runs, once it's `cycleSeenInterval` old.
+    /// Returns whether it moved, i.e. whether the state is worth saving.
+    public mutating func markCycleSeen(at now: Date) -> Bool {
+        guard cycle != nil else { return false }
+        if let cycleSeenAt, now.timeIntervalSince(cycleSeenAt) < Self.cycleSeenInterval { return false }
+        cycleSeenAt = now
+        return true
+    }
+
+    /// Closes a Cycle left open by a crash or force quit as ended by the system, at the last
+    /// time it was seen running, and returns the effects to carry out.
+    public mutating func closeLeftoverCycle() -> [PomodoroCycle.Effect] {
+        guard let cycle else { return [] }
+        let effects = cycle.endedBySystem(at: cycleSeenAt ?? cycle.stateStart).effects
+        self.cycle = nil
+        cycleSeenAt = nil
+        return effects
     }
 
     /// Allowances that haven't expired yet.

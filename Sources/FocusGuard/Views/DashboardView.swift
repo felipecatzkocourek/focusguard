@@ -229,11 +229,13 @@ private struct ActivityRow: View {
         case .allowanceGranted: "lock.open.fill"
         case .allowanceExpired: "lock.fill"
         case .cycleStarted: "timer"
-        case .activeEnded: "checkmark.circle.fill"
+        case .activeEnded: event.kind.isCutShort ? "scissors" : "checkmark.circle.fill"
         case .breakEnded: "cup.and.saucer.fill"
         case .idle: "hourglass"
         case .cycleEnded(.completed): "flag.checkered"
         case .cycleEnded(.stopped): "stop.circle"
+        case .cycleEnded(.appQuit): "power"
+        case .cycleEnded(.system): "exclamationmark.octagon"
         }
     }
 
@@ -244,7 +246,7 @@ private struct ActivityRow: View {
         case .allowanceGranted: .orange
         case .allowanceExpired: .red
         case .cycleStarted, .cycleEnded: .accentColor
-        case .activeEnded: .green
+        case .activeEnded: event.kind.isCutShort ? .orange : .green
         case .breakEnded: .teal
         case .idle: .secondary
         }
@@ -259,17 +261,22 @@ private struct ActivityRow: View {
         case .allowanceExpired(let domain): "\(domain) blocked again"
         case .cycleStarted(let plan):
             "Cycle started · \(plan.summary)"
-        case .activeEnded(let planned, let actual):
+        case .activeEnded(let planned, let actual, let reason) where event.kind.isCutShort:
+            "Active cut short · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(event.kind.shortfall)) Shortfall)"
+                + (reason.map { ": “\($0)”" } ?? "")
+        case .activeEnded(let planned, let actual, _):
             event.kind.overtime > 0
                 ? "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned)) (\(formatMinutes(event.kind.overtime)) Overtime)"
                 : "Active ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
         case .breakEnded(let planned, let actual):
-            actual < planned
+            event.kind.isCutShort
                 ? "Break cut short · \(formatMinutes(actual)) of \(formatMinutes(planned))"
                 : "Break ended · \(formatMinutes(actual)) of \(formatMinutes(planned))"
         case .idle(let duration): "Idle · \(formatMinutes(duration))"
         case .cycleEnded(.completed): "Cycle completed"
         case .cycleEnded(.stopped): "Cycle stopped"
+        case .cycleEnded(.appQuit): "Cycle ended · app quit"
+        case .cycleEnded(.system): "Cycle ended by the system"
         }
     }
 }

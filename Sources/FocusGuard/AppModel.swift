@@ -18,8 +18,6 @@ final class AppModel {
     private(set) var helperStatus: HelperStatus = .checking
     private(set) var lastError: String?
     private(set) var launchesAtLogin = SMAppService.mainApp.status == .enabled
-    /// The running Pomodoro Cycle, if any. It is a timer only: it never changes what is blocked.
-    private(set) var cycle: PomodoroCycle?
 
     /// Called when a blocking session starts, so the app can bring the dashboard up.
     @ObservationIgnored var onSessionStarted: (() -> Void)?
@@ -47,9 +45,13 @@ final class AppModel {
         configuration = configStore.load()
         state = stateStore.load()
         log = logStore.load()
+        closeLeftoverCycle()
     }
 
     var isBlocking: Bool { state.isBlocking }
+
+    /// The running Pomodoro Cycle, if any. It is a timer only: it never changes what is blocked.
+    var cycle: PomodoroCycle? { state.cycle }
 
     /// While blocking, anything that would weaken the block (removing sites or trigger
     /// modes, lowering friction) is locked. Adding sites is always allowed.
@@ -93,7 +95,10 @@ final class AppModel {
         let snapshot = await Task.detached { FocusMonitor.read() }.value
         if snapshot != focus { focus = snapshot }
         updateSession()
-        if cycle != nil { handle(.tick) }
+        if cycle != nil {
+            handle(.tick)
+            if state.markCycleSeen(at: Date()) { save() }
+        }
         await reconcile()
     }
 
@@ -128,29 +133,53 @@ final class AppModel {
         apply(PomodoroCycle.start(plan, at: Date()))
     }
 
-    func endActive() { handle(.endActive) }
+    /// `reason` is needed only to cut the Active short (see `PomodoroCycle.validReason`).
+    func endActive(reason: String? = nil) { handle(.endActive, reason: reason) }
+    func endBreak() { handle(.endBreak) }
     func startActive() { handle(.startActive) }
-    func stopCycle() { handle(.stop) }
+    func stopCycle(reason: String? = nil) { handle(.stop, reason: reason) }
 
-    private func handle(_ input: PomodoroCycle.Input) {
+    /// Ends the Cycle because the user is quitting the app. Returns whether the quit may go
+    /// ahead: `false` only if a needed reason was missing.
+    @discardableResult
+    func quitCycle(reason: String? = nil) -> Bool {
+        cycle == nil || handle(.quit, reason: reason)
+    }
+
+    /// Ends the Cycle because the system is shutting down or logging out. Never asks.
+    func endCycleBySystem() {
         guard let cycle else { return }
+        apply(cycle.endedBySystem(at: Date()))
+    }
+
+    @discardableResult
+    private func handle(_ input: PomodoroCycle.Input, reason: String? = nil) -> Bool {
+        guard let cycle else { return false }
         do {
-            apply(try cycle.handle(input, at: Date()))
+            apply(try cycle.handle(input, reason: reason, at: Date()))
+            return true
         } catch {
-            // The UI only offers inputs the current state accepts; a race with the Break
-            // running out is harmless, so just note it.
+            // The UI only offers inputs the current state accepts and collects a reason
+            // when one is needed; a race with the Break running out is harmless, so just note it.
             Log.session.notice("Cycle input \(String(describing: input), privacy: .public) rejected: \(String(describing: error), privacy: .public)")
+            return false
         }
+    }
+
+    /// A Cycle still in the saved state at launch was left open by a crash or force quit:
+    /// close it as ended by the system, never resume it.
+    private func closeLeftoverCycle() {
+        let effects = state.closeLeftoverCycle()
+        guard !effects.isEmpty else { return }
+        Log.session.notice("Closed a Pomodoro Cycle left open by the last run")
+        carryOut(effects)
+        save()
     }
 
     private func apply(_ transition: PomodoroCycle.Transition) {
         guard transition.cycle != cycle || !transition.effects.isEmpty else { return }
-        cycle = transition.cycle
-        for effect in transition.effects {
-            switch effect {
-            case .record(let kind, let date): log.record(kind, at: date)
-            }
-        }
+        state.setCycle(transition.cycle, at: Date())
+        carryOut(transition.effects)
         save()
 
         cycleTimer?.invalidate()
@@ -161,6 +190,14 @@ final class AppModel {
             }
             RunLoop.main.add(timer, forMode: .common)
             cycleTimer = timer
+        }
+    }
+
+    private func carryOut(_ effects: [PomodoroCycle.Effect]) {
+        for effect in effects {
+            switch effect {
+            case .record(let kind, let date): log.record(kind, at: date)
+            }
         }
     }
 

@@ -65,6 +65,39 @@ struct ActivityLogTests {
         #expect(decoded.events(on: date(12), calendar: calendar).count == 5)
     }
 
+    @Test func aCutShortActiveKnowsItsShortfall() {
+        #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 600, reason: "Meeting").shortfall == 900)
+        #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1680).shortfall == 0)
+        #expect(ActivityEvent.Kind.breakEnded(planned: 300, actual: 120).shortfall == 0)
+    }
+
+    @Test func aPhaseEndedBeforeItsPlannedLengthIsCutShort() {
+        #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 600, reason: "Meeting").isCutShort)
+        #expect(ActivityEvent.Kind.breakEnded(planned: 300, actual: 120).isCutShort)
+        #expect(!ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1500).isCutShort)
+        #expect(!ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1680).isCutShort)
+        #expect(!ActivityEvent.Kind.breakEnded(planned: 300, actual: 300).isCutShort)
+        #expect(!ActivityEvent.Kind.idle(duration: 60).isCutShort)
+    }
+
+    @Test func aCutShortReasonSurvivesSavingAndLoading() throws {
+        var log = ActivityLog()
+        log.record(.activeEnded(planned: 1500, actual: 600, reason: "Meeting moved up"), at: date(9, 10))
+
+        let decoded = try JSONDecoder().decode(ActivityLog.self, from: JSONEncoder().encode(log))
+        #expect(decoded == log)
+    }
+
+    @Test func anEndedActiveLoggedBeforeReasonsExistedStillLoads() throws {
+        let json = """
+        {"events":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","date":0,
+                    "kind":{"activeEnded":{"planned":1500,"actual":1680}}}]}
+        """
+        let log = try JSONDecoder().decode(ActivityLog.self, from: Data(json.utf8))
+
+        #expect(log.events.map(\.kind) == [.activeEnded(planned: 1500, actual: 1680, reason: nil)])
+    }
+
     @Test func anEndedActiveKnowsItsOvertime() {
         #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1680).overtime == 180)
         #expect(ActivityEvent.Kind.activeEnded(planned: 1500, actual: 1500).overtime == 0)
