@@ -51,7 +51,7 @@ A Phase of focused work. It ends only when the user ends it, never on its own.
 _Avoid_: Pomodoro (for a single interval), work phase, work interval
 
 **Break**:
-A Phase of rest between Actives. During a Session, all Blocked sites are reachable until it ends, which it does on its own; a Snooze can reopen it, and the next Active waits for the user.
+A Phase of rest between Actives. During a Session, all Blocked sites are reachable until it ends. It ends on its own, and then the next Active waits for the user; a Snooze can reopen it. If the user ends it early, it is cut short and the next Active starts right away.
 _Avoid_: Pause, rest
 
 **Snooze**:
