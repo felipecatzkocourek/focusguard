@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   end on their own, and the Cycle waits in Idle until you start the next Active. Every Phase
   and each Cycle's start and end appear in today's activity. The Cycle doesn't block anything
   yet.
+- Cutting a Pomodoro Active short: ending it, stopping or quitting the app before its
+  planned length shows the time left and asks for a typed reason. The Active is logged as cut
+  short with its Shortfall and the reason. A Break can be ended early without a reason; it is
+  logged as cut short and the next Active starts right away. Quitting at any other point ends
+  the Cycle without asking ("app quit"); a shutdown or logout never asks, and a Cycle left open
+  by a crash or force quit is closed at the next launch, both logged as ended by the system.
 
 ### Fixed
 - An activity event this build can't decode (e.g. a kind written by a newer build) no

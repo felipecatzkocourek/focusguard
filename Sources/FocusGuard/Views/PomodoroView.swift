@@ -56,6 +56,7 @@ private struct PlanEditor: View {
 private struct RunningCycleView: View {
     @Environment(AppModel.self) private var model
     let cycle: PomodoroCycle
+    @State private var cuttingShort: CutShortSheet.Action?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -71,13 +72,14 @@ private struct RunningCycleView: View {
                 }
                 Spacer()
                 mainButton(at: now)
-                if cycle.canStop(at: now) {
-                    Button("Stop", role: .destructive) { model.stopCycle() }
+                Button("Stop", role: .destructive) {
+                    if cycle.canStop(at: now) { model.stopCycle() } else { cuttingShort = .stop }
                 }
             }
             .frame(maxWidth: .infinity)
             .padding(4)
         }
+        .sheet(item: $cuttingShort) { CutShortSheet(cycle: cycle, action: $0) }
     }
 
     private var title: String {
@@ -99,7 +101,13 @@ private struct RunningCycleView: View {
 
     @ViewBuilder private func mainButton(at now: Date) -> some View {
         if cycle.reachedPlannedLength(at: now) {
-            BigButton(title: cycle.isLastActive ? "Finish Cycle" : "Start Break", action: model.endActive)
+            BigButton(title: cycle.isLastActive ? "Finish Cycle" : "Start Break") { model.endActive() }
+        } else if cycle.state == .active {
+            Button(cycle.isLastActive ? "Finish Cycle Early…" : "End Active Early…") { cuttingShort = .endActive }
+                .controlSize(.large)
+        } else if cycle.state == .break {
+            Button("End Break · Start Active \(cycle.activeNumber + 1)", action: model.endBreak)
+                .controlSize(.large)
         } else if cycle.state == .idle {
             BigButton(title: "Start Active \(cycle.activeNumber + 1)", action: model.startActive)
         }
@@ -116,5 +124,63 @@ private struct BigButton: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.extraLarge)
+    }
+}
+
+/// The Friction for cutting an Active short (ending it or stopping the Cycle before its
+/// planned length): the time left and a typed reason.
+private struct CutShortSheet: View {
+    enum Action: Identifiable {
+        case endActive, stop
+        var id: Self { self }
+    }
+
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let cycle: PomodoroCycle
+    let action: Action
+    @State private var reason = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title).font(.title2.bold())
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text("\(formatCountdown(cycle.remaining(at: context.date) ?? 0)) left in Active \(cycle.activeNumber) of \(cycle.plan.actives). It will be logged as cut short, with your reason.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            TextField("Reason", text: $reason, prompt: Text("Why are you stopping early?"))
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Button("Keep Going", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(confirmTitle) {
+                    switch action {
+                    case .endActive: model.endActive(reason: reason)
+                    case .stop: model.stopCycle(reason: reason)
+                    }
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(PomodoroCycle.validReason(reason) == nil)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
+    }
+
+    private var title: String {
+        switch action {
+        case .endActive: cycle.isLastActive ? "Finish the Cycle early?" : "End this Active early?"
+        case .stop: "Stop the Cycle early?"
+        }
+    }
+
+    private var confirmTitle: String {
+        switch action {
+        case .endActive: cycle.isLastActive ? "Finish Cycle" : "Start Break"
+        case .stop: "Stop Cycle"
+        }
     }
 }

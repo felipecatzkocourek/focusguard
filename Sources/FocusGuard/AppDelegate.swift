@@ -1,4 +1,5 @@
 import AppKit
+import FocusGuardCore
 
 /// App entry point. FocusGuard uses an AppKit lifecycle (with SwiftUI views inside) so it
 /// has full control over the dashboard window — where it opens, that closing it only
@@ -20,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     private var dashboard: DashboardWindowController?
     private var statusItem: StatusItemController?
+    /// Set when macOS announces a shutdown, restart or logout, so the quit that follows
+    /// never prompts.
+    private var systemIsEndingSession = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.make()
@@ -33,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake), name: NSWorkspace.didWakeNotification, object: nil
         )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(systemWillPowerOff), name: NSWorkspace.willPowerOffNotification, object: nil
+        )
 
         dashboard.show(activate: true)
         Task { await model.start() }
@@ -45,6 +52,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// Quitting ends the running Cycle. A quit during an Active before its planned length is
+    /// held until the user gives a reason (or cancels); a shutdown or logout never asks.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if systemIsEndingSession || Self.quitIsFromSystem {
+            model.endCycleBySystem()
+            return .terminateNow
+        }
+        guard let cycle = model.cycle, !cycle.canStop(at: Date()) else {
+            return model.quitCycle() ? .terminateNow : .terminateCancel
+        }
+        guard let reason = askReasonToQuit(during: cycle) else { return .terminateCancel }
+        return model.quitCycle(reason: reason) ? .terminateNow : .terminateCancel
+    }
+
+    /// Whether the quit Apple event comes from a shutdown, restart or logout.
+    private static var quitIsFromSystem: Bool {
+        let systemReasons: Set<OSType> = [
+            kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAEShowShutdownDialog, kAERestart, kAEShutDown,
+        ]
+        guard let reason = NSAppleEventManager.shared().currentAppleEvent?
+            .attributeDescriptor(forKeyword: kAEQuitReason)?.enumCodeValue else { return false }
+        return systemReasons.contains(reason)
+    }
+
+    /// The same Friction as cutting the Active short from the Pomodoro tab: the minutes left
+    /// and a typed reason. Returns `nil` if the user cancels.
+    private func askReasonToQuit(during cycle: PomodoroCycle) -> String? {
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "Why are you stopping early?"
+
+        let alert = NSAlert()
+        alert.messageText = "Quit during Active \(cycle.activeNumber) of \(cycle.plan.actives)?"
+        alert.informativeText = "\(formatMinutes(cycle.remaining(at: Date()) ?? 0)) left. Quitting now cuts this Active short and ends the Cycle."
+        alert.accessoryView = field
+        let quit = alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        quit.isEnabled = false
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSControl.textDidChangeNotification, object: field, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { quit.isEnabled = PomodoroCycle.validReason(field.stringValue) != nil }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        NSApp.activate()
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return PomodoroCycle.validReason(field.stringValue)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -73,6 +130,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             model.dismissFirefoxRestart()
         }
+    }
+
+    @objc private func systemWillPowerOff() {
+        systemIsEndingSession = true
     }
 
     @objc private func systemDidWake() {
