@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   end on their own, and the Cycle waits in Idle until you start the next Active. Every Phase
   and each Cycle's start and end appear in today's activity. The Cycle doesn't block anything
   yet.
+- CI check on pull requests that fails when the PR title doesn't follow Conventional
+  Commits or when the squash-merge subject (`<title> (#N)`) is longer than 72 chars.
 
 ### Fixed
 - An activity event this build can't decode (e.g. a kind written by a newer build) no

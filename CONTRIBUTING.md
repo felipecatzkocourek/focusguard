@@ -12,8 +12,10 @@ pull request.
    - `docs/…`, `test/…`, `refactor/…`, `build/…`, `ci/…`
 3. Commit in small, focused steps (see below).
 4. Open a PR using the template and link the issue (`Closes #N`).
-5. CI must be green. PRs are **squash-merged**, so the PR title becomes the commit on
-   `main` and has to follow the commit convention too.
+5. CI must be green. PRs are **squash-merged**, and the repo is set to use the PR title
+   as the commit subject (`squash_merge_commit_title = PR_TITLE`), so the subject on
+   `main` is `<PR title> (#N)`. The `PR title` check fails unless the title follows the
+   commit convention below and the whole subject, `(#N)` included, fits in 72 chars.
 
 ### Blocking fixes
 
