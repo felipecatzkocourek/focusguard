@@ -54,6 +54,28 @@ struct PomodoroTests {
         }
     }
 
+    @Test func endingAnActiveEarlyWithAReasonCutsItShort() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        let transition = try started.handle(.endActive, reason: "  Meeting moved up ", at: at(10))
+
+        let cycle = try #require(transition.cycle)
+        #expect(cycle.state == .break)
+        #expect(transition.effects == [
+            .record(.activeEnded(planned: minutes(25), actual: minutes(10), reason: "Meeting moved up"), at: at(10)),
+        ])
+    }
+
+    @Test func aBlankOrTooShortReasonCountsAsMissing() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        for reason in ["", "   ", " ok "] {
+            #expect(throws: PomodoroCycle.Rejection.reasonRequired) {
+                try started.handle(.endActive, reason: reason, at: at(10))
+            }
+        }
+    }
+
     @Test func aBreakEndsOnItsOwnAndTheCycleWaitsInIdle() throws {
         let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
         let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
@@ -68,6 +90,33 @@ struct PomodoroTests {
         #expect(transition.effects == [
             .record(.breakEnded(planned: minutes(5), actual: minutes(5)), at: at(30)),
         ])
+    }
+
+    @Test func endingABreakEarlyNeedsNoReasonAndStartsTheNextActive() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+        let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
+
+        let transition = try onBreak.handle(.endBreak, at: at(27))
+
+        let second = try #require(transition.cycle)
+        #expect(second.state == .active)
+        #expect(second.activeNumber == 2)
+        #expect(second.remaining(at: at(27)) == minutes(25))
+        #expect(transition.effects == [
+            .record(.breakEnded(planned: minutes(5), actual: minutes(2)), at: at(27)),
+        ])
+    }
+
+    @Test func aBreakCanOnlyBeEndedWhileItRuns() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+        let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
+
+        #expect(throws: PomodoroCycle.Rejection.notAllowed) {
+            try started.handle(.endBreak, at: at(10))
+        }
+        #expect(throws: PomodoroCycle.Rejection.notAllowed) {
+            try onBreak.handle(.endBreak, at: at(31)) // already Idle
+        }
     }
 
     @Test func theNextActiveKeepsItsNormalLengthAfterOvertimeAndIdle() throws {
@@ -160,6 +209,18 @@ struct PomodoroTests {
         }
     }
 
+    @Test func stopBeforeThePlannedLengthWithAReasonCutsTheActiveShort() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        let transition = try started.handle(.stop, reason: "Feeling sick", at: at(18))
+
+        #expect(transition.cycle == nil)
+        #expect(transition.effects == [
+            .record(.activeEnded(planned: minutes(25), actual: minutes(18), reason: "Feeling sick"), at: at(18)),
+            .record(.cycleEnded(.stopped), at: at(18)),
+        ])
+    }
+
     @Test func stopExactlyAtThePlannedLengthNeedsNoReason() throws {
         let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
 
@@ -169,6 +230,66 @@ struct PomodoroTests {
         #expect(transition.effects == [
             .record(.activeEnded(planned: minutes(25), actual: minutes(25)), at: at(25)),
             .record(.cycleEnded(.stopped), at: at(25)),
+        ])
+    }
+
+    @Test func quittingDuringAnActiveBeforeItsPlannedLengthNeedsAReason() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        #expect(throws: PomodoroCycle.Rejection.reasonRequired) {
+            try started.handle(.quit, at: at(20))
+        }
+
+        let transition = try started.handle(.quit, reason: "Done for today", at: at(20))
+
+        #expect(transition.cycle == nil)
+        #expect(transition.effects == [
+            .record(.activeEnded(planned: minutes(25), actual: minutes(20), reason: "Done for today"), at: at(20)),
+            .record(.cycleEnded(.appQuit), at: at(20)),
+        ])
+    }
+
+    @Test func quittingAtAnyOtherPointEndsTheCycleWithoutAReason() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+        let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
+
+        let duringOvertime = try started.handle(.quit, at: at(27))
+        let duringBreak = try onBreak.handle(.quit, at: at(28))
+
+        #expect(duringOvertime.cycle == nil)
+        #expect(duringOvertime.effects == [
+            .record(.activeEnded(planned: minutes(25), actual: minutes(27)), at: at(27)),
+            .record(.cycleEnded(.appQuit), at: at(27)),
+        ])
+        #expect(duringBreak.cycle == nil)
+        #expect(duringBreak.effects == [
+            .record(.breakEnded(planned: minutes(5), actual: minutes(3)), at: at(28)),
+            .record(.cycleEnded(.appQuit), at: at(28)),
+        ])
+    }
+
+    @Test func theSystemEndsAnActiveWithoutAReason() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+
+        let transition = started.endedBySystem(at: at(12))
+
+        #expect(transition.cycle == nil)
+        #expect(transition.effects == [
+            .record(.activeEnded(planned: minutes(25), actual: minutes(12)), at: at(12)),
+            .record(.cycleEnded(.system), at: at(12)),
+        ])
+    }
+
+    @Test func theSystemEndingACycleLetsARunOutBreakEndFirst() throws {
+        let started = try #require(PomodoroCycle.start(plan, at: t0).cycle)
+        let onBreak = try #require(try started.handle(.endActive, at: at(25)).cycle)
+
+        let transition = onBreak.endedBySystem(at: at(33))
+
+        #expect(transition.effects == [
+            .record(.breakEnded(planned: minutes(5), actual: minutes(5)), at: at(30)),
+            .record(.idle(duration: minutes(3)), at: at(33)),
+            .record(.cycleEnded(.system), at: at(33)),
         ])
     }
 

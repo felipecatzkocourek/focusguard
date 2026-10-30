@@ -44,6 +44,10 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         case completed
         /// The user pressed Stop.
         case stopped
+        /// The user quit the app.
+        case appQuit
+        /// A shutdown or logout, or a crash or force quit found at the next launch.
+        case system
     }
 
     /// The result of an input: the new state (`nil` once the Cycle has ended) and its effects.
@@ -89,8 +93,8 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         state == .active && now.timeIntervalSince(stateStart) >= plan.activeLength
     }
 
-    /// Whether Stop is accepted now without Friction: anywhere except an Active that hasn't
-    /// reached its planned length.
+    /// Whether Stop (or quitting the app) is accepted now without Friction: anywhere except
+    /// an Active that hasn't reached its planned length.
     public func canStop(at now: Date) -> Bool {
         state != .active || reachedPlannedLength(at: now)
     }
@@ -111,10 +115,26 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         case tick
         /// The user ends the current Active.
         case endActive
+        /// The user ends the current Break before it runs out and goes straight into the
+        /// next Active. No Friction: getting back to work is never discouraged.
+        case endBreak
         /// The user starts the next Active after a Break.
         case startActive
         /// The user ends the whole Cycle.
         case stop
+        /// The user quits the app, which ends the Cycle with the same Friction as Stop.
+        case quit
+    }
+
+    /// A typed reason counts once it has this many characters, ignoring surrounding
+    /// whitespace: the same bar as the reason for an Allowance.
+    public static let minimumReasonLength = 3
+
+    /// `text` trimmed, or `nil` when it's too short to count as a reason.
+    public static func validReason(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              trimmed.count >= minimumReasonLength else { return nil }
+        return trimmed
     }
 
     /// Why an input was not accepted. The state is unchanged.
@@ -125,7 +145,9 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
         case notAllowed
     }
 
-    public func handle(_ input: Input, at now: Date) throws(Rejection) -> Transition {
+    /// `reason` is what the user typed to get through Friction; it is only looked at, and
+    /// only logged, when the input cuts an Active short.
+    public func handle(_ input: Input, reason: String? = nil, at now: Date) throws(Rejection) -> Transition {
         // Every input first lets time pass, so a Break that has run out is over before the
         // input is considered.
         var next = self
@@ -139,35 +161,65 @@ public struct PomodoroCycle: Codable, Equatable, Sendable {
             next.state = .active
             next.stateStart = now
             next.activeNumber += 1
+        case .endBreak:
+            guard next.state == .break else { throw .notAllowed }
+            effects.append(next.breakEnded(at: now))
+            next.state = .active
+            next.stateStart = now
+            next.activeNumber += 1
         case .endActive:
             guard next.state == .active else { throw .notAllowed }
-            effects.append(try next.activeEnded(at: now))
+            try next.requireReasonIfCutShort(reason, at: now)
+            effects.append(next.activeEnded(reason: reason, at: now))
             guard !next.isLastActive else {
                 effects.append(.record(.cycleEnded(.completed), at: now))
                 return Transition(cycle: nil, effects: effects)
             }
             next.state = .break
             next.stateStart = now
-        case .stop:
-            switch next.state {
-            case .active:
-                effects.append(try next.activeEnded(at: now))
-            case .break:
-                effects.append(.record(.breakEnded(planned: plan.breakLength, actual: now.timeIntervalSince(next.stateStart)), at: now))
-            case .idle:
-                effects += next.idleEnded(at: now)
-            }
-            effects.append(.record(.cycleEnded(.stopped), at: now))
-            return Transition(cycle: nil, effects: effects)
+        case .stop, .quit:
+            try next.requireReasonIfCutShort(reason, at: now)
+            let ending: Ending = input == .stop ? .stopped : .appQuit
+            return Transition(cycle: nil, effects: effects + next.ended(ending, reason: reason, at: now))
         }
         return Transition(cycle: next, effects: effects)
     }
 
-    /// The log entry for ending the current Active now, which needs no reason once its
-    /// planned length is reached.
-    private func activeEnded(at now: Date) throws(Rejection) -> Effect {
-        guard reachedPlannedLength(at: now) else { throw .reasonRequired }
-        return .record(.activeEnded(planned: plan.activeLength, actual: now.timeIntervalSince(stateStart)), at: now)
+    /// Ends the Cycle because the system shut down or logged out, or because the app found it
+    /// still open at launch after a crash or force quit. Never needs a reason.
+    public func endedBySystem(at now: Date) -> Transition {
+        var next = self
+        let effects = next.advance(to: now)
+        return Transition(cycle: nil, effects: effects + next.ended(.system, reason: nil, at: now))
+    }
+
+    /// Friction: cutting the current Active short (ending it, or the Cycle, before its planned
+    /// length) needs a reason. Anything else goes through.
+    private func requireReasonIfCutShort(_ reason: String?, at now: Date) throws(Rejection) {
+        guard canStop(at: now) || Self.validReason(reason) != nil else { throw .reasonRequired }
+    }
+
+    /// The log entries for ending the whole Cycle now, closing the current Phase or Idle first.
+    private func ended(_ ending: Ending, reason: String?, at now: Date) -> [Effect] {
+        var effects: [Effect]
+        switch state {
+        case .active: effects = [activeEnded(reason: reason, at: now)]
+        case .break: effects = [breakEnded(at: now)]
+        case .idle: effects = idleEnded(at: now)
+        }
+        return effects + [.record(.cycleEnded(ending), at: now)]
+    }
+
+    /// The log entry for ending the current Active now. Only a cut-short Active keeps the
+    /// reason.
+    private func activeEnded(reason: String?, at now: Date) -> Effect {
+        let reason = reachedPlannedLength(at: now) ? nil : Self.validReason(reason)
+        return .record(.activeEnded(planned: plan.activeLength, actual: now.timeIntervalSince(stateStart), reason: reason), at: now)
+    }
+
+    /// The log entry for ending the current Break now, before it runs out.
+    private func breakEnded(at now: Date) -> Effect {
+        .record(.breakEnded(planned: plan.breakLength, actual: now.timeIntervalSince(stateStart)), at: now)
     }
 
     /// The log entry for leaving Idle now, if any time was spent in it: starting the next
