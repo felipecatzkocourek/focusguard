@@ -2,42 +2,16 @@
 
 ## Workflow
 
-`main` is always releasable. All work happens on short-lived branches and lands through a
-pull request.
+In short: every change starts from a GitHub issue, lives on a branch from `main` named
+`<type>/<issue>-<slug>` (e.g. `feat/12-site-list`), is committed in small
+[Conventional Commits](https://www.conventionalcommits.org/), and lands through a PR
+that says `Closes #N`. CI must be green; PRs are squash-merged after review, so the PR
+title becomes the commit on `main`. A small fix that blocks the current ticket can ride
+on the same branch as its own `fix:` commit, noted in the PR and under `Fixed` in
+`CHANGELOG.md`; anything bigger gets its own issue and PR.
 
-1. Pick or open an issue, so the change has a reason and a place for discussion.
-2. Branch from `main` with a type prefix:
-   - `feat/…`: new functionality
-   - `fix/…`: bug fixes
-   - `docs/…`, `test/…`, `refactor/…`, `build/…`, `ci/…`
-3. Commit in small, focused steps (see below).
-4. Open a PR using the template and link the issue (`Closes #N`).
-5. CI must be green. PRs are **squash-merged**, so the PR title becomes the commit on
-   `main` and has to follow the commit convention too.
+## Commit scopes
 
-### Blocking fixes
-
-If a bug blocks the work on the current ticket and the fix is small (a few lines,
-no design decision), fix it on the same branch instead of opening a new issue:
-
-- Give it its own `fix:` commit, separate from the ticket's commits, with a body
-  that says what broke and why it blocked the work.
-- List it under "Also" in the PR's "What changes" section.
-- Add it to `CHANGELOG.md` under `Fixed`.
-
-If the fix is larger or needs a decision, open an issue and a separate PR.
-
-## Commit messages
-
-[Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-<type>(<optional scope>): <imperative summary, ≤ 72 chars>
-
-<why the change was made, wrapped at 72 columns>
-```
-
-Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`.
 Scopes used in this repo: `core`, `helper`, `app`, `scripts`.
 
 ## Versioning and releases
