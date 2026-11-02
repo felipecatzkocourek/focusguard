@@ -1,0 +1,27 @@
+name: PR title
+
+# Squash merge turns the PR title into the commit subject on main, so it has to follow
+# the commit convention in CONTRIBUTING.md.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test the checker
+        run: ./scripts/test-check-pr-title.sh
+
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/check-pr-title.sh "$TITLE" "$NUMBER"
